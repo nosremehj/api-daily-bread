@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM eclipse-temurin:17-jdk-jammy AS build
 WORKDIR /build
-COPY mvnw mvnw.cmd .mvn/ ./
+COPY mvnw mvnw.cmd ./
+COPY .mvn .mvn
 COPY pom.xml .
 COPY src src
 RUN chmod +x mvnw && ./mvnw --no-transfer-progress clean package -DskipTests
