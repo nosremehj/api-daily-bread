@@ -14,10 +14,12 @@ import com.daily.bread.auth.model.RefreshToken;
 import com.daily.bread.auth.model.User;
 import com.daily.bread.auth.repository.RefreshTokenRepository;
 import com.daily.bread.auth.repository.UserRepository;
+import com.daily.bread.auth.request.AuthRequests;
 import com.daily.bread.auth.request.LoginRequest;
 import com.daily.bread.auth.request.RefreshRequest;
 import com.daily.bread.auth.request.RegisterRequest;
 import com.daily.bread.auth.response.AuthResponse;
+import com.daily.bread.auth.response.ProfileUpdateResponse;
 import com.daily.bread.auth.response.UserResponse;
 
 @Service
@@ -89,6 +91,46 @@ public class AuthService {
 		User user = userRepository.findByUsernameIgnoreCase(username)
 				.orElseThrow(() -> new InvalidCredentialsException("Sessão inválida."));
 		return toUserResponse(user);
+	}
+
+	@Transactional
+	public ProfileUpdateResponse updateProfile(String username, AuthRequests.UpdateProfileRequest request) {
+		User user = userRepository.findByUsernameIgnoreCase(username.trim())
+				.orElseThrow(() -> new InvalidCredentialsException("Sessão inválida."));
+		String email = request.email().trim().toLowerCase();
+		String newUsername = request.username().trim();
+		if (!email.equalsIgnoreCase(user.getEmail())
+				&& userRepository.existsByEmailIgnoreCaseAndIdNot(email, user.getId())) {
+			throw new EmailAlreadyExistsException("E-mail já cadastrado.");
+		}
+		if (!newUsername.equalsIgnoreCase(user.getUsername())
+				&& userRepository.existsByUsernameIgnoreCaseAndIdNot(newUsername, user.getId())) {
+			throw new UsernameAlreadyExistsException("Nome de usuário já em uso.");
+		}
+		boolean usernameChanged = !user.getUsername().equalsIgnoreCase(newUsername);
+		user.setName(request.name().trim());
+		user.setEmail(email);
+		user.setUsername(newUsername);
+		user = userRepository.save(user);
+		UserResponse response = toUserResponse(user);
+		if (usernameChanged) {
+			refreshTokenRepository.deleteAllByUser(user);
+			return new ProfileUpdateResponse(response, buildAuthResponse(user));
+		}
+		return new ProfileUpdateResponse(response, null);
+	}
+
+	@Transactional
+	public AuthResponse changePassword(String username, AuthRequests.ChangePasswordRequest request) {
+		User user = userRepository.findByUsernameIgnoreCase(username.trim())
+				.orElseThrow(() -> new InvalidCredentialsException("Sessão inválida."));
+		if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+			throw new InvalidCredentialsException("Senha atual incorreta.");
+		}
+		user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+		userRepository.save(user);
+		refreshTokenRepository.deleteAllByUser(user);
+		return buildAuthResponse(user);
 	}
 
 	private AuthResponse buildAuthResponse(User user) {
