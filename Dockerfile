@@ -14,5 +14,7 @@ WORKDIR /app
 COPY --from=build /build/target/bread-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080
 ENV PORT=8080
-# Render define PORT; application.properties usa ${PORT:9090}
+# Imagem pensada para deploy: perfil prod (PostgreSQL). Local com H2: mvn spring-boot:run.
+ENV SPRING_PROFILES_ACTIVE=prod
+# Em docker-compose, sobrescreva com jdbc:postgresql://postgres:5432/bread (nome do serviço).
 ENTRYPOINT ["sh", "-c", "exec java -jar /app/app.jar"]
