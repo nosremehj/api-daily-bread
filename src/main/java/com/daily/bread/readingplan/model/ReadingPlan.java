@@ -10,10 +10,12 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "reading_plans")
@@ -26,8 +28,8 @@ public class ReadingPlan {
 	@Column(name = "original_filename", nullable = false, length = 512)
 	private String originalFilename;
 
-	@Lob
-	@Column(name = "pdf_content", nullable = false, columnDefinition = "BLOB")
+	@JdbcTypeCode(SqlTypes.VARBINARY)
+	@Column(name = "pdf_content", nullable = false)
 	private byte[] pdfContent;
 
 	@Column(name = "imported_at", nullable = false)

@@ -1,20 +1,32 @@
-# Prompt: pré-deploy Docker e Render (API Bread)
+# Prompt: pré-deploy Docker e VPS (API Bread)
 
-Documento para **você** ou para **colar em um assistente** ao final de uma entrega, garantindo build local, imagem Docker alinhada ao `Dockerfile` e deploy seguro no Render.
+Documento para **você** ou para **colar em um assistente** ao final de uma entrega: validar build (Maven + imagem), subir **PostgreSQL** na VPS (via `docker-compose.yml`), rodar a API com perfil **`prod`** e checagens pós-deploy.
 
 ---
 
 ## Objetivo
 
-1. Validar o projeto com Maven **antes** do build Docker (economiza tempo e pega falhas cedo).
-2. Garantir que `docker build` conclui na máquina (ou no CI) com o mesmo `Dockerfile` usado pelo Render.
-3. Conferir **migrações Flyway** e **variáveis de ambiente** de produção antes do push.
+1. Validar o projeto com Maven **antes** do build Docker (falhas aparecem mais cedo).
+2. Garantir que `docker build` conclui com o `Dockerfile` da raiz (local ou CI).
+3. Na VPS: Postgres persistente (Compose), API com **`SPRING_PROFILES_ACTIVE=prod`**, segredos fortes, sem usuário de teste automático.
+4. Conferir **migrações Flyway** antes de apontar produção para banco novo ou existente.
 
 ---
 
 ## Frase curta para colar (humano ou IA)
 
-> *No repositório `api-daily-bread`, na raiz: executar `./mvnw clean verify`; em seguida `docker build -t bread-api:local .` e confirmar sucesso. Não alterar migrações Flyway já aplicadas em produção; novas só como `V*__*.sql`. Em produção: `bread.seed-test-user=false`, JWT forte (`BREAD_JWT_SECRET` ou `bread.jwt.secret`), datasource Postgres correto. Depois commit/push na branch do Render e verificar deploy; se o build parecer desatualizado, limpar cache de build no Render e redeployar.*
+> *No repositório `api-daily-bread`, na raiz: `./mvnw clean verify`; depois `docker build -t bread-api:local .` e confirmar sucesso. Não reescrever migrações Flyway já aplicadas; novas só como `V*__*.sql`. Em produção na VPS: subir Postgres com `docker compose up -d`, definir `SPRING_PROFILES_ACTIVE=prod`, `SPRING_DATASOURCE_*`, `BREAD_JWT_SECRET` (≥32 caracteres), garantir `bread.seed-test-user=false` (já no perfil prod). Opcional: Nginx na frente (HTTPS) e CORS com a origem do front. Depois health check e uma rota autenticada.*
+
+---
+
+## Arquitetura esperada na VPS
+
+| Componente | Forma típica |
+|------------|----------------|
+| **PostgreSQL** | `docker-compose.yml` na raiz (serviço `postgres`, volume `bread_pgdata`). |
+| **API** | JAR no host (`java -jar` + systemd) **ou** container da imagem do `Dockerfile` na mesma rede Docker do Postgres. |
+| **HTTPS / domínio** | Nginx (ou Caddy) como reverse proxy para `127.0.0.1:PORT` da API. |
+| **Firewall** | Liberar 22 (SSH), 80/443 (proxy); **não** expor5432 publicamente se o app só roda na mesma máquina. |
 
 ---
 
@@ -22,11 +34,30 @@ Documento para **você** ou para **colar em um assistente** ao final de uma entr
 
 | Etapa | Conteúdo |
 |--------|-----------|
-| **Build** | Imagem `eclipse-temurin:17-jdk-jammy`, copia `pom.xml`, `src`, `mvnw`, roda `./mvnw clean package -DskipTests`. |
-| **Runtime** | Imagem `eclipse-temurin:17-jre-jammy`, usuário não-root `spring`, JAR em `/app/app.jar`. |
-| **Porta** | `EXPOSE 8080`; `ENV PORT=8080`. O app usa `${PORT:9090}` no `application.properties` — no Render, defina `PORT` conforme o serviço (geralmente `10000` ou o que o painel indicar). |
+| **Build** | `eclipse-temurin:17-jdk-jammy`, copia `pom.xml`, `src`, `mvnw`, roda `./mvnw clean package -DskipTests`. |
+| **Runtime** | `eclipse-temurin:17-jre-jammy`, usuário não-root `spring`, JAR em `/app/app.jar`. |
+| **Porta** | `EXPOSE 8080`; `ENV PORT=8080`. O app usa `server.port=${PORT:9090}` — na VPS, defina `PORT` igual ao que o proxy encaminha (ex.: `8080`). |
 
-Artefato esperado: `target/bread-0.0.1-SNAPSHOT.jar` (versão do `pom.xml`).
+Artefato: `target/bread-0.0.1-SNAPSHOT.jar` (versão no `pom.xml`).
+
+---
+
+## Variáveis de ambiente (produção / VPS)
+
+Obrigatório ou altamente recomendado:
+
+| Variável | Função |
+|----------|--------|
+| `SPRING_PROFILES_ACTIVE` | `prod` — ativa `application-prod.properties` (Postgres, sem H2, sem seed de usuário teste). |
+| `SPRING_DATASOURCE_URL` | Ex.: `jdbc:postgresql://localhost:5432/bread` (host `localhost` se a API está no host e o Postgres publicou a porta 5432; ou nome do **serviço** `postgres` se a API roda em container na mesma rede Compose). |
+| `SPRING_DATASOURCE_USERNAME` | Alinhado a `POSTGRES_USER` (padrão local no Compose: `bread`). |
+| `SPRING_DATASOURCE_PASSWORD` | Alinhado a `POSTGRES_PASSWORD` — **troque o default** `bread_change_me` em produção. |
+| `BREAD_JWT_SECRET` | Segredo HS256 forte (mínimo ~32 caracteres); não versionar. |
+
+Já coberto pelo perfil **prod** (não precisa repetir salvo override):
+
+- `bread.seed-test-user=false`
+- Dialect PostgreSQL, H2 console desligado
 
 ---
 
@@ -35,65 +66,83 @@ Artefato esperado: `target/bread-0.0.1-SNAPSHOT.jar` (versão do `pom.xml`).
 ### 1. Código e banco
 
 - [ ] Tudo que deve ir para produção está commitado; `git status` revisado.
-- [ ] Novas alterações de schema apenas via **nova** migração em `src/main/resources/db/migration/` (`V5__...`, etc.).
-- [ ] **Nunca** reescrever migrações já aplicadas em ambientes compartilhados.
+- [ ] Alterações de schema só com **nova** migração em `src/main/resources/db/migration/` (`V5__...`, etc.).
+- [ ] **Nunca** reescrever migrações já aplicadas em bancos compartilhados.
 
-### 2. Produção — configuração sensível
+### 2. VPS — Postgres (Compose)
 
-- [ ] `bread.seed-test-user=false` (ou variável ausente com default desligado no perfil prod, conforme sua estratégia).
-- [ ] Segredo JWT forte e não versionado: `BREAD_JWT_SECRET` / `bread.jwt.secret`.
-- [ ] Datasource: URL, usuário e senha do **Postgres** (Render ou outro) conferidos no painel.
-- [ ] `spring.jpa.hibernate.ddl-auto=validate` em prod (já é o padrão típico; evitar `update` em produção sem critério).
+Na raiz do projeto na VPS (ou copie só o `docker-compose.yml`):
+
+```bash
+docker compose up -d
+```
+
+- Ajuste `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` via ambiente ou arquivo `.env` no mesmo diretório (não commitar segredos).
+- Primeira subida: volume vazio → Flyway cria o schema ao iniciar a API.
 
 ### 3. Build local (Maven)
-
-Na **raiz** do repositório (`api-daily-bread`):
 
 ```bash
 ./mvnw clean verify
 ```
 
-- **Preferido:** `verify` roda testes e valida o pacote.
-- **Rápido (menos seguro):** `./mvnw clean package -DskipTests` — alinhado ao que o **Dockerfile** executa dentro da imagem.
+- **Rápido (alinhado ao Dockerfile):** `./mvnw clean package -DskipTests`.
 
-### 4. Imagem Docker (local)
-
-Pré-requisito: **Docker Desktop** (ou daemon) em execução.
+### 4. Imagem Docker da API
 
 ```bash
 docker build -t bread-api:local .
 ```
 
-- Falhou: corrigir código, `pom.xml` ou `Dockerfile` antes do push.
-- Windows: se aparecer erro de *pipe* `dockerDesktopLinuxEngine`, abra o Docker Desktop e tente de novo.
+- Falhou: ver o estágio `RUN ./mvnw` no log.
 
-### 5. Smoke opcional (container + Postgres)
+### 5. Subir a API na VPS (escolha um fluxo)
 
-Ajuste host, porta, banco e credenciais. Exemplo com Postgres na máquina host (Windows/Mac: `host.docker.internal`):
+**A — JAR no host (sem container da API)**
+
+```bash
+./mvnw clean package -DskipTests   # na máquina de build; copiar o JAR para a VPS
+export SPRING_PROFILES_ACTIVE=prod
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/bread
+export SPRING_DATASOURCE_USERNAME=bread
+export SPRING_DATASOURCE_PASSWORD='<senha forte>'
+export BREAD_JWT_SECRET='<mínimo 32 caracteres aleatórios>'
+export PORT=8080
+java -jar bread-0.0.1-SNAPSHOT.jar
+```
+
+Recomendado encapsular isso em **systemd** (`Environment=` / `EnvironmentFile=`).
+
+**B — API em container, Postgres no Compose**
+
+- Coloque API e `postgres` na **mesma rede** Docker.
+- `SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/bread` (hostname = nome do serviço no `docker-compose.yml`).
+- Exponha a porta da API só em `127.0.0.1` se usar Nginx no host.
+
+**Smoke manual (API em container, Postgres no host com porta5432 publicada):**
 
 ```bash
 docker run --rm -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
   -e PORT=8080 \
-  -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/nome_do_banco' \
-  -e SPRING_DATASOURCE_USERNAME=usuario \
-  -e SPRING_DATASOURCE_PASSWORD=senha \
+  -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/bread' \
+  -e SPRING_DATASOURCE_USERNAME=bread \
+  -e SPRING_DATASOURCE_PASSWORD='senha' \
   -e BREAD_JWT_SECRET='seu-secret-minimo-32-chars' \
-  -e BREAD_SEED_TEST_USER=false \
   bread-api:local
 ```
 
-No Render, use as variáveis equivalentes configuradas no serviço (nomes podem seguir o mesmo padrão Spring Boot `SPRING_DATASOURCE_*`).
+*(Em Linux, troque `host.docker.internal` por IP do bridge ou `--add-host` conforme seu setup.)*
 
-### 6. Git e Render
+### 6. Proxy, CORS e pós-deploy
 
-- [ ] Push na branch conectada ao serviço Web.
-- [ ] Deploy automático concluído ou deploy manual disparado.
-- [ ] Pós-deploy: `/actuator/health` (se público), login, rota nova crítica (ex.: `GET /api/v1/reading-progress/dashboard` autenticado).
-- [ ] Se a versão parecer antiga: **Clear build cache** no Render e novo deploy.
+- [ ] Nginx (ou similar): `proxy_pass` para `http://127.0.0.1:8080` (ou a `PORT` usada).
+- [ ] **CORS:** incluir no código a origem do front em produção (`CorsConfig`); localhost/Vercel sozinhos não cobrem o domínio da VPS.
+- [ ] Pós-deploy: `/actuator/health`, fluxo de login, rota crítica autenticada (ex.: progresso de leitura).
 
 ---
 
-## Comandos mínimos (copiar e colar)
+## Comandos mínimos (máquina de desenvolvimento)
 
 ```bash
 cd /caminho/para/api-daily-bread
@@ -107,15 +156,24 @@ docker build -t bread-api:local .
 
 | Sintoma | Ação |
 |---------|------|
-| `dockerDesktopLinuxEngine` / daemon inacessível | Iniciar Docker Desktop; aguardar estado “running”. |
-| Build Maven ok, Docker falha | Ver log do estágio `RUN ./mvnw`; muitas vezes dependência de rede ou erro de compilação só no Linux. |
-| App sobe mas Flyway erro | Ordem de migrações, conflito de versão, ou URL de banco errada no ambiente. |
-| Render com código velho | Novo commit, ou limpar cache de build + redeploy. |
+| `dockerDesktopLinuxEngine` / daemon inacessível | Iniciar Docker Desktop; aguardar “running”. |
+| Build Maven ok, Docker falha | Log do estágio `RUN ./mvnw`; rede ou diferença Linux vs Windows. |
+| App sobe mas Flyway erro | URL/credenciais do Postgres; ordem de migrações; banco já parcialmente migrado. |
+| `Connection refused` ao Postgres | Compose não está no ar; host errado (`localhost` vs `postgres`); porta5432 bloqueada. |
+| JWT inválido após deploy | `BREAD_JWT_SECRET` diferente do ambiente anterior → tokens antigos invalidam; esperado. |
 
 ---
 
-## Referência
+## Referência rápida no repositório
 
-- `Dockerfile` na raiz do projeto.
+- `Dockerfile` — imagem da API.
+- `docker-compose.yml` — **somente PostgreSQL** (produção na VPS).
+- `src/main/resources/application-prod.properties` — datasource e perfil prod.
+- `src/main/resources/application-dev.properties` — H2 local.
 - Migrações: `src/main/resources/db/migration/`.
-- Porta local no `application.properties` usa `${PORT:9090}`; container/Render deve definir `PORT` de forma consistente com o mapeamento do serviço.
+
+---
+
+## Plataformas gerenciadas (legado)
+
+Se ainda existir deploy no **Render** (ou similar): variáveis equivalentes (`SPRING_DATASOURCE_*`, `PORT` conforme o painel, `BREAD_JWT_SECRET`). Em caso de build “antigo”, use limpeza de cache de build + redeploy no painel. Fluxo principal deste documento é **VPS + Compose + perfil prod**.
