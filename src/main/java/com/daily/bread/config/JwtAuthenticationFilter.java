@@ -56,6 +56,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 	private static boolean isPublicAuthPath(String uri) {
 		return uri.startsWith("/api/v1/auth/register")
 				|| uri.startsWith("/api/v1/auth/login")
-				|| uri.startsWith("/api/v1/auth/refresh");
+				|| uri.startsWith("/api/v1/auth/refresh")
+				|| uri.startsWith("/api/v1/bible");
 	}
 }

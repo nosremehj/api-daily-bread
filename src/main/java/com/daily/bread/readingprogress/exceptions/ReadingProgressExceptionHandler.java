@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.daily.bread.bible.exceptions.BibleNotFoundException;
 import com.daily.bread.readingplan.exceptions.ReadingPlanNotFoundException;
 
 @RestControllerAdvice(basePackages = "com.daily.bread.readingprogress.controllers")
@@ -30,5 +31,10 @@ public class ReadingProgressExceptionHandler {
 	@ExceptionHandler(InvalidProgressDateException.class)
 	public ResponseEntity<Map<String, String>> handleInvalidDate(InvalidProgressDateException ex) {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+	}
+
+	@ExceptionHandler(BibleNotFoundException.class)
+	public ResponseEntity<Map<String, String>> handleBibleNotFound(BibleNotFoundException ex) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
 	}
 }

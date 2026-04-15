@@ -21,6 +21,7 @@ import com.daily.bread.readingprogress.request.MarkDayReadRequest;
 import com.daily.bread.readingprogress.response.CalendarDayReadResponse;
 import com.daily.bread.readingprogress.response.EnrollmentSummaryResponse;
 import com.daily.bread.readingprogress.response.ReadingProgressDashboardResponse;
+import com.daily.bread.readingprogress.response.TodayBibleReadingResponse;
 import com.daily.bread.readingprogress.services.ReadingProgressService;
 
 import jakarta.validation.Valid;
@@ -57,6 +58,12 @@ public class ReadingProgressController {
 	public ReadingProgressDashboardResponse dashboard(Authentication authentication,
 			@RequestParam(required = false) LocalDate date) {
 		return readingProgressService.dashboard(authentication.getName(), date);
+	}
+
+	@GetMapping("/today/bible")
+	public TodayBibleReadingResponse todayBible(Authentication authentication,
+			@RequestParam(required = false) String version, @RequestParam(required = false) LocalDate date) {
+		return readingProgressService.todayBible(authentication.getName(), version, date);
 	}
 
 	@GetMapping("/calendar")

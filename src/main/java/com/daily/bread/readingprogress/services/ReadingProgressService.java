@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.daily.bread.auth.model.User;
+import com.daily.bread.bible.response.BibleChapterResponse;
+import com.daily.bread.bible.services.BibleBookResolver;
+import com.daily.bread.bible.services.BibleService;
 import com.daily.bread.auth.repository.UserRepository;
 import com.daily.bread.readingplan.exceptions.ReadingPlanNotFoundException;
 import com.daily.bread.readingplan.model.ReadingPlan;
@@ -35,6 +38,8 @@ import com.daily.bread.readingprogress.request.MarkDayReadRequest;
 import com.daily.bread.readingprogress.response.CalendarDayReadResponse;
 import com.daily.bread.readingprogress.response.EnrollmentSummaryResponse;
 import com.daily.bread.readingprogress.response.ReadingProgressDashboardResponse;
+import com.daily.bread.readingprogress.response.TodayBibleBlockResponse;
+import com.daily.bread.readingprogress.response.TodayBibleReadingResponse;
 import com.daily.bread.readingprogress.response.TodayReadingBlockResponse;
 import com.daily.bread.readingprogress.response.TodayReadingSectionResponse;
 import com.daily.bread.readingprogress.response.WeekDayStripItemResponse;
@@ -50,15 +55,20 @@ public class ReadingProgressService {
 	private final ReadingPlanDayRepository planDayRepository;
 	private final UserReadingEnrollmentRepository enrollmentRepository;
 	private final UserReadingCompletionRepository completionRepository;
+	private final BibleService bibleService;
+	private final BibleBookResolver bibleBookResolver;
 
 	public ReadingProgressService(UserRepository userRepository, ReadingPlanRepository planRepository,
 			ReadingPlanDayRepository planDayRepository, UserReadingEnrollmentRepository enrollmentRepository,
-			UserReadingCompletionRepository completionRepository) {
+			UserReadingCompletionRepository completionRepository, BibleService bibleService,
+			BibleBookResolver bibleBookResolver) {
 		this.userRepository = userRepository;
 		this.planRepository = planRepository;
 		this.planDayRepository = planDayRepository;
 		this.enrollmentRepository = enrollmentRepository;
 		this.completionRepository = completionRepository;
+		this.bibleService = bibleService;
+		this.bibleBookResolver = bibleBookResolver;
 	}
 
 	@Transactional
@@ -121,6 +131,41 @@ public class ReadingProgressService {
 		TodayReadingSectionResponse today = buildTodaySection(enrollment, plan.getId(), totalDays, ref);
 		return new ReadingProgressDashboardResponse(plan.getId(), plan.getOriginalFilename(), totalDays,
 				(int) completedDays, percent, streak, daysLeftInYear, strip, today);
+	}
+
+	@Transactional(readOnly = true)
+	public TodayBibleReadingResponse todayBible(String username, String versionId, LocalDate ref) {
+		LocalDate referenceDate = ref != null ? ref : LocalDate.now();
+		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
+				.orElseThrow(NoActiveEnrollmentException::new);
+		String v = bibleService.requireVersion(
+				versionId == null || versionId.isBlank() ? "nvi" : versionId.trim());
+		ReadingPlan plan = enrollment.getPlan();
+		int totalDays = (int) planDayRepository.countByPlan_Id(plan.getId());
+		LocalDate planStart = enrollment.getPlanStartDate();
+		int scheduledDay = dayNumberForPlanDate(planStart, referenceDate);
+		if (scheduledDay < 1 || scheduledDay > totalDays) {
+			return new TodayBibleReadingResponse(referenceDate, null, null, v, false, List.of());
+		}
+		LocalDate scheduledDate = scheduledDateForDay(planStart, scheduledDay);
+		Optional<ReadingPlanDay> dayOpt = planDayRepository.findByPlan_IdAndDayNumber(plan.getId(), scheduledDay);
+		boolean done = completionRepository.existsByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay);
+		if (dayOpt.isEmpty()) {
+			return new TodayBibleReadingResponse(referenceDate, scheduledDay, scheduledDate, v, done, List.of());
+		}
+		ReadingPlanDay d = dayOpt.get();
+		Integer bookNum = bibleBookResolver.resolveBookNumber(d.getBookName()).orElse(null);
+		String abbrev = bookNum != null ? bibleBookResolver.abbrevForBook(bookNum).orElse(null) : null;
+		List<BibleChapterResponse> chapters = new ArrayList<>();
+		if (bookNum != null) {
+			for (int ch = d.getStartChapter(); ch <= d.getEndChapter(); ch++) {
+				chapters.add(bibleService.getChapter(v, bookNum, ch));
+			}
+		}
+		TodayBibleBlockResponse block = new TodayBibleBlockResponse(d.getId(), d.getDayNumber(), d.getBookName(),
+				bookNum, abbrev, d.getStartChapter(), d.getEndChapter(), d.getReadingText(), done,
+				List.copyOf(chapters));
+		return new TodayBibleReadingResponse(referenceDate, scheduledDay, scheduledDate, v, done, List.of(block));
 	}
 
 	@Transactional(readOnly = true)
@@ -230,8 +275,12 @@ public class ReadingProgressService {
 		Optional<ReadingPlanDay> day = planDayRepository.findByPlan_IdAndDayNumber(planId, scheduledDay);
 		boolean done = completionRepository.existsByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay);
 		List<TodayReadingBlockResponse> blocks = day
-				.map(d -> List.of(new TodayReadingBlockResponse(d.getId(), d.getDayNumber(), d.getBookName(),
-						d.getStartChapter(), d.getEndChapter(), d.getReadingText(), done)))
+				.map(d -> {
+					Integer bookNum = bibleBookResolver.resolveBookNumber(d.getBookName()).orElse(null);
+					String abbrev = bookNum != null ? bibleBookResolver.abbrevForBook(bookNum).orElse(null) : null;
+					return List.of(new TodayReadingBlockResponse(d.getId(), d.getDayNumber(), d.getBookName(), bookNum,
+							abbrev, d.getStartChapter(), d.getEndChapter(), d.getReadingText(), done));
+				})
 				.orElse(List.of());
 		return new TodayReadingSectionResponse(ref, scheduledDay, scheduledDate, blocks);
 	}
