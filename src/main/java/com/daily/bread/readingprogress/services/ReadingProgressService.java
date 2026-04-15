@@ -6,10 +6,12 @@ import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ import com.daily.bread.readingprogress.request.MarkDayReadRequest;
 import com.daily.bread.readingprogress.response.CalendarDayReadResponse;
 import com.daily.bread.readingprogress.response.EnrollmentSummaryResponse;
 import com.daily.bread.readingprogress.response.ReadingProgressDashboardResponse;
+import com.daily.bread.readingprogress.response.ReadingStatisticsResponse;
 import com.daily.bread.readingprogress.response.TodayBibleBlockResponse;
 import com.daily.bread.readingprogress.response.TodayBibleReadingResponse;
 import com.daily.bread.readingprogress.response.TodayReadingBlockResponse;
@@ -49,6 +52,9 @@ import com.daily.bread.readingprogress.response.WeekStripDayStatus;
 public class ReadingProgressService {
 
 	private static final Locale PT_BR = Locale.forLanguageTag("pt-BR");
+
+	/** Inclusive calendar span limit for {@code /calendar} (one civil year, leap inclusive). */
+	private static final int MAX_CALENDAR_RANGE_DAYS = 366;
 
 	private final UserRepository userRepository;
 	private final ReadingPlanRepository planRepository;
@@ -173,9 +179,7 @@ public class ReadingProgressService {
 		if (fromInclusive == null || toInclusive == null) {
 			throw new InvalidProgressDateException("Informe from e to (ISO-8601).");
 		}
-		if (toInclusive.isBefore(fromInclusive)) {
-			throw new InvalidProgressDateException("O fim do intervalo não pode ser antes do início.");
-		}
+		validateInclusiveDateRange(fromInclusive, toInclusive);
 		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
 				.orElseThrow(NoActiveEnrollmentException::new);
 		Set<LocalDate> readDates = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), fromInclusive,
@@ -185,6 +189,91 @@ public class ReadingProgressService {
 			out.add(new CalendarDayReadResponse(d, readDates.contains(d)));
 		}
 		return out;
+	}
+
+	@Transactional(readOnly = true)
+	public List<CalendarDayReadResponse> calendarYear(String username, int year) {
+		if (year < 1970 || year > 2100) {
+			throw new InvalidProgressDateException("Informe um ano entre 1970 e 2100.");
+		}
+		LocalDate fromInclusive = LocalDate.of(year, 1, 1);
+		LocalDate toInclusive = LocalDate.of(year, 12, 31);
+		return calendar(username, fromInclusive, toInclusive);
+	}
+
+	@Transactional(readOnly = true)
+	public ReadingStatisticsResponse statistics(String username, LocalDate fromInclusive, LocalDate toInclusive) {
+		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
+				.orElseThrow(NoActiveEnrollmentException::new);
+		ReadingPlan plan = enrollment.getPlan();
+		LocalDate planStart = enrollment.getPlanStartDate();
+		long totalDaysLong = planDayRepository.countByPlan_Id(plan.getId());
+		int totalDays = (int) totalDaysLong;
+		long completedDays = completionRepository.countByEnrollment_Id(enrollment.getId());
+		int annualPercent = totalDays == 0 ? 0 : (int) Math.round(100.0 * completedDays / totalDays);
+
+		LocalDate today = LocalDate.now();
+		LocalDate periodTo = toInclusive != null ? toInclusive : today;
+		LocalDate yearStart = periodTo.with(TemporalAdjusters.firstDayOfYear());
+		LocalDate defaultFrom = planStart.isAfter(yearStart) ? planStart : yearStart;
+		LocalDate periodFrom = fromInclusive != null ? fromInclusive : defaultFrom;
+		if (periodFrom.isBefore(planStart)) {
+			periodFrom = planStart;
+		}
+		validateInclusiveDateRange(periodFrom, periodTo);
+
+		Set<LocalDate> allReadDates = completionRepository.findAllDistinctReadDates(enrollment.getId());
+		LocalDate streakRef = periodTo.isAfter(today) ? today : periodTo;
+		int currentStreak = currentStreakDays(allReadDates, streakRef);
+		int longestStreak = longestStreakDays(allReadDates);
+
+		Set<LocalDate> readInPeriod = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), periodFrom,
+				periodTo);
+		int daysReadInPeriod = readInPeriod.size();
+		List<LocalDate> readDatesList = new ArrayList<>(new TreeSet<>(readInPeriod));
+
+		LocalDate missedThrough = periodTo.isBefore(today) ? periodTo : today;
+		int daysMissed = 0;
+		if (!missedThrough.isBefore(periodFrom)) {
+			for (LocalDate d = periodFrom; !d.isAfter(missedThrough); d = d.plusDays(1)) {
+				int scheduled = dayNumberForPlanDate(planStart, d);
+				if (scheduled < 1 || scheduled > totalDays) {
+					continue;
+				}
+				if (!readInPeriod.contains(d)) {
+					daysMissed++;
+				}
+			}
+		}
+
+		Integer nextMilestonePercent = null;
+		Integer daysUntilNextMilestone = null;
+		if (totalDays > 0 && completedDays < totalDays) {
+			int[] milestones = { 25, 50, 75, 100 };
+			for (int m : milestones) {
+				int targetDays = (int) Math.ceil(totalDays * (m / 100.0));
+				if (completedDays < targetDays) {
+					nextMilestonePercent = m;
+					daysUntilNextMilestone = Math.max(0, targetDays - (int) completedDays);
+					break;
+				}
+			}
+		}
+
+		return new ReadingStatisticsResponse(plan.getId(), plan.getOriginalFilename(), planStart, periodFrom, periodTo,
+				totalDays, (int) completedDays, daysReadInPeriod, daysMissed, currentStreak, longestStreak, annualPercent,
+				Collections.unmodifiableList(readDatesList), nextMilestonePercent, daysUntilNextMilestone);
+	}
+
+	private static void validateInclusiveDateRange(LocalDate fromInclusive, LocalDate toInclusive) {
+		if (toInclusive.isBefore(fromInclusive)) {
+			throw new InvalidProgressDateException("O fim do intervalo não pode ser antes do início.");
+		}
+		long spanDays = ChronoUnit.DAYS.between(fromInclusive, toInclusive) + 1;
+		if (spanDays > MAX_CALENDAR_RANGE_DAYS) {
+			throw new InvalidProgressDateException(
+					"Intervalo máximo de " + MAX_CALENDAR_RANGE_DAYS + " dias (inclusive). Reduza from/to.");
+		}
 	}
 
 	@Transactional
@@ -346,5 +435,29 @@ public class ReadingProgressService {
 			streak++;
 		}
 		return streak;
+	}
+
+	static int longestStreakDays(Set<LocalDate> readDates) {
+		if (readDates == null || readDates.isEmpty()) {
+			return 0;
+		}
+		List<LocalDate> sorted = new ArrayList<>(readDates);
+		Collections.sort(sorted);
+		int longest = 1;
+		int run = 1;
+		for (int i = 1; i < sorted.size(); i++) {
+			LocalDate prev = sorted.get(i - 1);
+			LocalDate cur = sorted.get(i);
+			if (cur.equals(prev.plusDays(1))) {
+				run++;
+				if (run > longest) {
+					longest = run;
+				}
+			}
+			else if (!cur.equals(prev)) {
+				run = 1;
+			}
+		}
+		return longest;
 	}
 }

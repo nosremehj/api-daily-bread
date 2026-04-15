@@ -43,4 +43,21 @@ class ReadingProgressServiceTest {
 		assertThat(ReadingProgressService.dayNumberForPlanDate(start, LocalDate.of(2026, 1, 1))).isEqualTo(1);
 		assertThat(ReadingProgressService.dayNumberForPlanDate(start, LocalDate.of(2026, 1, 10))).isEqualTo(10);
 	}
+
+	@Test
+	void longestStreakSingleDay() {
+		assertThat(ReadingProgressService.longestStreakDays(Set.of(LocalDate.of(2026, 4, 1)))).isEqualTo(1);
+	}
+
+	@Test
+	void longestStreakConsecutiveRun() {
+		Set<LocalDate> dates = Set.of(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 2), LocalDate.of(2026, 4, 3),
+				LocalDate.of(2026, 4, 10));
+		assertThat(ReadingProgressService.longestStreakDays(dates)).isEqualTo(3);
+	}
+
+	@Test
+	void longestStreakEmpty() {
+		assertThat(ReadingProgressService.longestStreakDays(Set.of())).isZero();
+	}
 }

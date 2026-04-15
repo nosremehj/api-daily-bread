@@ -21,6 +21,7 @@ import com.daily.bread.readingprogress.request.MarkDayReadRequest;
 import com.daily.bread.readingprogress.response.CalendarDayReadResponse;
 import com.daily.bread.readingprogress.response.EnrollmentSummaryResponse;
 import com.daily.bread.readingprogress.response.ReadingProgressDashboardResponse;
+import com.daily.bread.readingprogress.response.ReadingStatisticsResponse;
 import com.daily.bread.readingprogress.response.TodayBibleReadingResponse;
 import com.daily.bread.readingprogress.services.ReadingProgressService;
 
@@ -70,6 +71,17 @@ public class ReadingProgressController {
 	public List<CalendarDayReadResponse> calendar(Authentication authentication,
 			@RequestParam LocalDate from, @RequestParam LocalDate to) {
 		return readingProgressService.calendar(authentication.getName(), from, to);
+	}
+
+	@GetMapping("/calendar/year")
+	public List<CalendarDayReadResponse> calendarYear(Authentication authentication, @RequestParam int year) {
+		return readingProgressService.calendarYear(authentication.getName(), year);
+	}
+
+	@GetMapping("/statistics")
+	public ReadingStatisticsResponse statistics(Authentication authentication,
+			@RequestParam(required = false) LocalDate from, @RequestParam(required = false) LocalDate to) {
+		return readingProgressService.statistics(authentication.getName(), from, to);
 	}
 
 	@PostMapping("/days/read")
