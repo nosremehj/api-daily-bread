@@ -2,10 +2,13 @@ package com.daily.bread.bible.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.daily.bread.bible.response.BibleBookResponse;
 import com.daily.bread.bible.response.BibleChapterResponse;
 import com.daily.bread.bible.response.BibleVerseCompareResponse;
 import com.daily.bread.bible.response.BibleVerseDetailResponse;
@@ -15,6 +18,31 @@ class BibleServiceTest {
 
 	@Autowired
 	private BibleService bibleService;
+
+	@Autowired
+	private BibleBookResolver bibleBookResolver;
+
+	@Test
+	void resolveBookNumber_romanNumeralAliasesMatchNviDigitNames() {
+		assertThat(bibleBookResolver.resolveBookNumber("I João")).hasValue(62);
+		assertThat(bibleBookResolver.resolveBookNumber("II João")).hasValue(63);
+		assertThat(bibleBookResolver.resolveBookNumber("III João")).hasValue(64);
+		assertThat(bibleBookResolver.resolveBookNumber("I Samuel")).hasValue(9);
+	}
+
+	@Test
+	void getChapterCount_matchesNviJonah() {
+		assertThat(bibleService.getChapterCount("nvi", 32)).isEqualTo(4);
+	}
+
+	@Test
+	void listBooks_includesChapterCountPerBook() {
+		List<BibleBookResponse> books = bibleService.listBooks("nvi");
+		assertThat(books).hasSize(66);
+		BibleBookResponse genesis = books.get(0);
+		assertThat(genesis.number()).isEqualTo(1);
+		assertThat(genesis.chapterCount()).isEqualTo(bibleService.getChapterCount("nvi", 1));
+	}
 
 	@Test
 	void getChapter_loadsNtlhGenesis1() {

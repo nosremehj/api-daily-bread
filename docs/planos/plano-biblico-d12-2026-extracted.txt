@@ -1,0 +1,389 @@
+Plano 02
+A Bíblia de capa a capa (Em 1 ano)
+Dia Leitura Lido
+1 Gênesis 1-3
+2 Gênesis 4-6
+3 Gênesis 7-9
+4 Gênesis 10-12
+5 Gênesis 13-15
+6 Gênesis 16-18
+7 Gênesis 19-21
+8 Gênesis 22-24
+9 Gênesis 25-27
+10 Gênesis 28-30
+11 Gênesis 31-33
+12 Gênesis 34-36
+13 Gênesis 37-39
+14 Gênesis 40-42
+15 Gênesis 43-45
+16 Gênesis 46-48
+17 Gênesis 49-50
+18 Êxodo 1-4
+19 Êxodo 5-7
+20 Êxodo 8-10
+21 Êxodo 11-13
+22 Êxodo 14-16
+23 Êxodo 17-19
+24 Êxodo 20-22
+25 Êxodo 23-25
+26 Êxodo 26-28
+27 Êxodo 29-31
+28 Êxodo 32-34
+29 Êxodo 35-37
+30 Êxodo 38-40
+31 Levítico 1-3
+Dia Leitura Lido
+32 Levítico 4-6
+33 Levítico 7-9
+34 Levítico 10-12
+35 Levítico 13-16
+36 Levítico 17-19
+37 Levítico 20-22
+38 Levítico 23-25
+39 Levítico 26-27
+40 Números 1-3
+41 Números 4-6
+42 Números 7-9
+43 Números10-12
+44 Números13-15
+45 Números16-18
+46 Números19-21
+47 Números22-24
+48 Números25-27
+49 Números28-30
+50 Números31-33
+51 Números34-36
+52 Deuteron. 1-3
+53 Deuteron. 4-6
+54 Deuteron. 7-9
+55 Deuteron.10-12
+56 Deuteron.13-15
+57 Deuteron.16-18
+58 Deuteron.19-21
+59 Deuteron.22-23
+Dia Leitura Lido
+60 Deuteron.24-26
+61 Deuteron.27-29
+62 Deuteron.30-32
+63 Deuteron.33-34
+64 Josué 1-3
+65 Josué 4-6
+66 Josué 7-9
+67 Josué 10-12
+68 Josué 13-15
+69 Josué 16-18
+70 Josué 19-21
+71 Josué 22-24
+72 Juízes 1-3
+73 Juízes 4-6
+74 Juízes 7-9
+75 Juízes 10-12
+76 Juízes 13-15
+77 Juízes 16-18
+78 Juízes 19-21
+79 Rute 1-4
+80 I Samuel 1-3
+81 I Samuel 4-6
+82 I Samuel 7-9
+83 I Samuel 10-12
+84 I Samuel 13-15
+85 I Samuel 16-18
+86 I Samuel 19-21
+87 I Samuel 22-24
+88 I Samuel 25-27
+89 I Samuel 28-31
+90 II Samuel 1-3
+PLANO BÍBLICO D12 - 2026
+
+Dia Leitura Lido
+91 II Samuel 4-6
+92 II Samuel 7-9
+93 II Samuel 10-12
+94 II Samuel 13-16
+95 II Samuel 17-20
+96 II Samuel 21-24
+97 I Reis 1-3
+98 I Reis 4-6
+99 I Reis 7-9
+100 I Reis 10-12
+101 I Reis 13-15
+102 I Reis 16-18
+103 I Reis 19-22
+104 II Reis 1-4
+105 II Reis 5-7
+106 II Reis 8-10
+107 II Reis 11-13
+108 II Reis 14-16
+109 II Reis 17-19
+110 II Reis 20-22
+111 II Reis 23-25
+112I Crônicas 1-4
+113I Crônicas 5-7
+114I Crônicas 8-10
+115I Crônicas11-13
+116I Crônicas14-16
+117I Crônicas17-19
+118I Crônicas20-22
+119I Crônicas23-25
+120I Crônicas26-29
+Dia Leitura Lido
+121II Crônicas 1-3
+122II Crônicas 4-6
+123II Crônicas 7-9
+124II Crônicas10-12
+125II Crônicas13-15
+126II Crônicas16-18
+127II Crônicas19-21
+128II Crônicas22-24
+129II Crônicas25-27
+130II Crônicas28-30
+131II Crônicas31-33
+132II Crônicas34-36
+133 Esdras 1-4
+134 Esdras 5-7
+135 Esdras 8-10
+136 Neemias 1-4
+137 Neemias 5-7
+138 Neemias 8-10
+139 Neemias 11-13
+140 Ester 1-4
+141 Ester 5-7
+142 Ester 8-10
+143 Jó 1-3
+144 Jó 4-6
+145 Jó 7-9
+146 Jó 10-12
+147 Jó 13-15
+148 Jó 16-18
+149 Jó 19-21
+150 Jó 22-24
+151 Jó 25-27
+Dia Leitura Lido
+152 Jó 28-30
+153 Jó 31-33
+154 Jó 34-36
+155 Jó 37-39
+156 Jó 40-42
+157 Salmos 1-5
+158 Salmos 6-10
+159 Salmos 11-15
+160 Salmos 16-20
+161 Salmos 21-25
+162 Salmos 26-30
+163 Salmos 31-35
+164 Salmos 36-40
+165 Salmos 41-45
+166 Salmos 46-50
+167 Salmos 51-55
+168 Salmos 56-60
+169 Salmos 61-65
+170 Salmos 66-70
+171 Salmos 71-75
+172 Salmos 76-80
+173 Salmos 81-85
+174 Salmos 86-90
+175 Salmos 91-95
+176 Salmos 96-100
+177 Salmos101-115
+178 Salmos116-118
+179 Salmos 119
+180 Salmos120-125
+181 Salmos126-130
+A Bíblia de capa a capa (Em 1 ano)
+PLANO BÍBLICO D12 - 2026
+
+Dia Leitura Lido
+182 Salmos 131-135
+183 Salmos 136-138
+184 Salmos 139-141
+185 Salmos 142-144
+186 Salmos 145-148
+187 Salmos 149-150
+188Provérbios 1-4
+189Provérbios 5-7
+190Provérbios 8-10
+191Provérbios 11-13
+192Provérbios 14-16
+193Provérbios 17-19
+194Provérbios 20-22
+195Provérbios 23-25
+196Provérbios 26-28
+197Provérbios 29-31
+198Eclesiastes 1-3
+199Eclesiastes 4-6
+200Eclesiastes 7-9
+201Eclesiastes10-12
+202 Cantares 1-3
+203 Cantares 4-6
+204 Cantares 7-8
+205 Isaías 1-3
+206 Isaías 4-6
+207 Isaías 7-9
+208 Isaías 10-12
+209 Isaías 13-15
+210 Isaías 16-18
+211 Isaías 19-21
+212 Isaías 22-24
+Dia Leitura Lido
+213 Isaías 25-27
+214 Isaías 28-30
+215 Isaías 31-33
+216 Isaías 34-36
+217 Isaías 37-39
+218 Isaías 40-42
+219 Isaías 43-45
+220 Isaías 46-48
+221 Isaías 49-51
+222 Isaías 52-54
+223 Isaías 55-57
+224 Isaías 58-60
+225 Isaías 61-63
+226 Isaías 64-66
+227Jeremias 1-3
+228Jeremias 4-6
+229Jeremias 7-9
+230Jeremias 10-12
+231Jeremias 13-15
+232Jeremias 16-18
+233Jeremias 19-21
+234Jeremias 22-24
+235Jeremias 25-27
+236Jeremias 28-30
+237Jeremias 31-33
+238Jeremias 34-36
+239Jeremias 37-39
+240Jeremias 40-42
+241Jeremias 43-45
+242Jeremias 46-48
+243Jeremias 49-50
+Dia Leitura Lido
+244Jeremias51-52
+245 Lament. 1-5
+246 Ezequiel 1-3
+247 Ezequiel 4-6
+248 Ezequiel 7-9
+249 Ezequiel 10-12
+250 Ezequiel 13-15
+251 Ezequiel 16-18
+252 Ezequiel 19-21
+253 Ezequiel 22-24
+254 Ezequiel 25-27
+255 Ezequiel 28-30
+256 Ezequiel 31-33
+257 Ezequiel 34-36
+258 Ezequiel 37-39
+259 Ezequiel 40-42
+260 Ezequiel 43-45
+261 Ezequiel 46-48
+262 Daniel 1-3
+263 Daniel 4-6
+264 Daniel 7-9
+265 Daniel 10-12
+266 Oséias 1-3
+267 Oséias 4-6
+268 Oséias 7-9
+269 Oséias 10-14
+270 Joel 1-3
+271 Amós 1-3
+272 Amós 4-6
+273 Amós 7-9
+A Bíblia de capa a capa (Em 1 ano)
+PLANO BÍBLICO D12 - 2026
+
+Dia Leitura Lido
+274 Obadias e Jonas
+275Miquéias 1-4
+276Miquéias 5-7
+277 Naum 1-3
+278Habacuque 1-3
+279 Sofonias e Ageu
+280 Zacarias 1-2
+281 Zacarias 3-5
+282 Zacarias 6-8
+283 Zacarias 9-11
+284 Zacarias 12-14
+285Malaquias 1-4
+286 Mateus 1-4
+287 Mateus 5-7
+288 Mateus 8-10
+289 Mateus 11-13
+290 Mateus 14-16
+291 Mateus 17-19
+292 Mateus 20-22
+293 Mateus 23-25
+294 Mateus 26-28
+295 Marcos 1-4
+296 Marcos 5-7
+297 Marcos 8-10
+298 Marcos 11-13
+299 Marcos 14-16
+300 Lucas 1-3
+301 Lucas 4-6
+302 Lucas 7-9
+303 Lucas 10-12
+304 Lucas 13-15
+Dia Leitura Lido
+305 Lucas 16-18
+306 Lucas 19-21
+307 Lucas 22-24
+308 João 1-3
+309 João 4-6
+310 João 7-9
+311 João 10-12
+312 João 13-15
+313 João 16-18
+314 João 19-21
+315 Atos 1-4
+316 Atos 5-7
+317 Atos 8-10
+318 Atos 11-13
+319 Atos 14-16
+320 Atos 17-19
+321 Atos 20-22
+322 Atos 23-25
+323 Atos 26-28
+324Romanos 1-3
+325Romanos 4-7
+326Romanos 8-10
+327Romanos11-13
+328Romanos14-16
+329I Coríntios 1-4
+330I Coríntios 5-7
+331I Coríntios 8-10
+332I Coríntios11-13
+333I Coríntios14-16
+334II Coríntios 1-4
+Dia Leitura Lido
+335II Coríntios 5-7
+336II Coríntios8-10
+337II Coríntios11-13
+338 Gálatas 1-3
+339 Gálatas 4-6
+340 Efésios 1-3
+341 Efésios 4-6
+342Filipenses 1-4
+343Colossens. 1-4
+344I Tessalon. 1-5
+345II Tessalon. 1-3
+346I Timóteo 1-3
+347I Timóteo 4-6
+348II Timóteo 1-4
+349 Tito 1 + Filemom
+350 Hebreus 1-4
+351 Hebreus 5-7
+352 Hebreus 8-10
+353 Hebreus 11-13
+354 Tiago 1-5
+355 I Pedro 1-5
+356 II Pedro 1-3
+357 I João 1-5
+358 II e III João + Judas
+359Apocalipse 1-3
+360Apocalipse 4-6
+361Apocalipse 7-9
+362Apocalipse10-12
+363Apocalipse13-15
+364Apocalipse16-18
+365Apocalipse19-22
+A Bíblia de capa a capa (Em 1 ano)
+PLANO BÍBLICO D12 - 2026

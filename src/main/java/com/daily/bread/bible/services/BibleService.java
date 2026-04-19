@@ -53,7 +53,7 @@ public class BibleService {
 		List<BibleBookResponse> out = new ArrayList<>(books.size());
 		for (int i = 0; i < books.size(); i++) {
 			BibliaBookJson b = books.get(i);
-			out.add(new BibleBookResponse(i + 1, b.abbrev, b.name));
+			out.add(new BibleBookResponse(i + 1, b.abbrev, b.name, b.chapters.size()));
 		}
 		return out;
 	}
@@ -100,6 +100,16 @@ public class BibleService {
 		}
 		String v = normalizeVersion(versionId);
 		return getChapterBiblia(v, bookNumber, chapterNumber);
+	}
+
+	/** Quantidade de capítulos do livro na versão (ex.: para leitura “livro inteiro” na importação de planos). */
+	public int getChapterCount(String versionId, int bookNumber) {
+		if (bookNumber < 1 || bookNumber > 66) {
+			throw new BibleNotFoundException("Livro inválido: use um número entre 1 e 66.");
+		}
+		String v = normalizeVersion(versionId);
+		List<BibliaBookJson> books = loadBiblia(v);
+		return books.get(bookNumber - 1).chapters.size();
 	}
 
 	private BibleChapterResponse getChapterBiblia(String versionId, int bookNumber, int chapterNumber) {

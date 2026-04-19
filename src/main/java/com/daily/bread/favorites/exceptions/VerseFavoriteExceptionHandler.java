@@ -1,8 +1,9 @@
-package com.daily.bread.readingprogress.exceptions;
+package com.daily.bread.favorites.exceptions;
 
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -11,10 +12,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.daily.bread.bible.exceptions.BibleNotFoundException;
-import com.daily.bread.readingplan.exceptions.ReadingPlanNotFoundException;
 
-@RestControllerAdvice(basePackages = "com.daily.bread.readingprogress.controllers")
-public class ReadingProgressExceptionHandler {
+@RestControllerAdvice(basePackages = "com.daily.bread.favorites.controllers")
+public class VerseFavoriteExceptionHandler {
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException ex) {
@@ -24,28 +24,24 @@ public class ReadingProgressExceptionHandler {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", message));
 	}
 
-	@ExceptionHandler(ReadingPlanNotFoundException.class)
-	public ResponseEntity<Map<String, String>> handlePlanNotFound(ReadingPlanNotFoundException ex) {
-		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
-	}
-
-	@ExceptionHandler(NoActiveEnrollmentException.class)
-	public ResponseEntity<Map<String, String>> handleNoEnrollment(NoActiveEnrollmentException ex) {
-		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
-	}
-
-	@ExceptionHandler(EnrollmentAlreadyExistsException.class)
-	public ResponseEntity<Map<String, String>> handleAlreadyEnrolled(EnrollmentAlreadyExistsException ex) {
+	@ExceptionHandler(VerseFavoriteDuplicateException.class)
+	public ResponseEntity<Map<String, String>> handleDuplicate(VerseFavoriteDuplicateException ex) {
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
 	}
 
-	@ExceptionHandler(InvalidProgressDateException.class)
-	public ResponseEntity<Map<String, String>> handleInvalidDate(InvalidProgressDateException ex) {
-		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+	@ExceptionHandler(VerseFavoriteNotFoundException.class)
+	public ResponseEntity<Map<String, String>> handleNotFound(VerseFavoriteNotFoundException ex) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
 	}
 
 	@ExceptionHandler(BibleNotFoundException.class)
 	public ResponseEntity<Map<String, String>> handleBibleNotFound(BibleNotFoundException ex) {
 		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
+	}
+
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	public ResponseEntity<Map<String, String>> handleIntegrity(DataIntegrityViolationException ex) {
+		return ResponseEntity.status(HttpStatus.CONFLICT)
+				.body(Map.of("error", "Este versículo já está favoritado nesta data de leitura."));
 	}
 }

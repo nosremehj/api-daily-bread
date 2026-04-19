@@ -35,8 +35,12 @@ public class ReadingPlan {
 	@Column(name = "imported_at", nullable = false)
 	private Instant importedAt;
 
+	/** SHA-256 hex (64 chars) do PDF; importações com o mesmo ficheiro são rejeitadas. */
+	@Column(name = "pdf_sha256", length = 64)
+	private String pdfSha256;
+
 	@OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
-	@OrderBy("dayNumber ASC")
+	@OrderBy("dayNumber ASC, segmentIndex ASC")
 	private List<ReadingPlanDay> days = new ArrayList<>();
 
 	public Long getId() {
@@ -65,6 +69,14 @@ public class ReadingPlan {
 
 	public void setImportedAt(Instant importedAt) {
 		this.importedAt = importedAt;
+	}
+
+	public String getPdfSha256() {
+		return pdfSha256;
+	}
+
+	public void setPdfSha256(String pdfSha256) {
+		this.pdfSha256 = pdfSha256;
 	}
 
 	public List<ReadingPlanDay> getDays() {

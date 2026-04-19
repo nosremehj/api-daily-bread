@@ -26,4 +26,6 @@ public interface UserReadingCompletionRepository extends JpaRepository<UserReadi
 	boolean existsByEnrollment_IdAndDayNumber(Long enrollmentId, int dayNumber);
 
 	Optional<UserReadingCompletion> findByEnrollment_IdAndDayNumber(Long enrollmentId, int dayNumber);
+
+	void deleteByEnrollment_IdAndDayNumber(Long enrollmentId, int dayNumber);
 }

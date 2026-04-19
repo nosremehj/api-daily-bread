@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
@@ -13,6 +15,8 @@ import com.daily.bread.bible.response.BibleBookResponse;
 
 @Component
 public class BibleBookResolver {
+
+	private static final Pattern DIGIT_BOOK_PREFIX = Pattern.compile("^(\\d+)\\s+(.+)$");
 
 	private final Map<String, Integer> normalizedToNumber = new HashMap<>();
 	private final List<String> abbrevsByBookNumber;
@@ -24,6 +28,7 @@ public class BibleBookResolver {
 			index(b.name(), b.number());
 			index(b.abbrev(), b.number());
 			index(b.name().replace(" ", ""), b.number());
+			indexRomanPrefixedAliases(b);
 		}
 		addAlias("salmos", 19);
 	}
@@ -40,6 +45,32 @@ public class BibleBookResolver {
 
 	private void addAlias(String key, int number) {
 		normalizedToNumber.putIfAbsent(key, number);
+	}
+
+	/** Planos usam "I Samuel"; NVI usa "1 Samuel". Normaliza para o mesmo número. */
+	private void indexRomanPrefixedAliases(BibleBookResponse b) {
+		Matcher m = DIGIT_BOOK_PREFIX.matcher(b.name());
+		if (!m.matches()) {
+			return;
+		}
+		int n = Integer.parseInt(m.group(1));
+		String rest = m.group(2);
+		if (n == 1) {
+			putRomanAlias("I " + rest, b.number());
+		}
+		else if (n == 2) {
+			putRomanAlias("II " + rest, b.number());
+		}
+		else if (n == 3) {
+			putRomanAlias("III " + rest, b.number());
+		}
+	}
+
+	private void putRomanAlias(String label, int number) {
+		String key = normalize(label);
+		if (!key.isEmpty()) {
+			normalizedToNumber.putIfAbsent(key, number);
+		}
 	}
 
 	public Optional<Integer> resolveBookNumber(String bookLabel) {

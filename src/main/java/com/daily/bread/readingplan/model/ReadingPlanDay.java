@@ -12,8 +12,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "reading_plan_days", uniqueConstraints = @UniqueConstraint(name = "uq_reading_plan_days_plan_day", columnNames = {
-		"plan_id", "day_number" }))
+@Table(name = "reading_plan_days", uniqueConstraints = @UniqueConstraint(name = "uq_reading_plan_days_plan_day_seg", columnNames = {
+		"plan_id", "day_number", "segment_index" }))
 public class ReadingPlanDay {
 
 	@Id
@@ -26,6 +26,9 @@ public class ReadingPlanDay {
 
 	@Column(name = "day_number", nullable = false)
 	private Integer dayNumber;
+
+	@Column(name = "segment_index", nullable = false)
+	private Integer segmentIndex;
 
 	@Column(name = "book_name", nullable = false, length = 256)
 	private String bookName;
@@ -60,6 +63,14 @@ public class ReadingPlanDay {
 
 	public void setDayNumber(Integer dayNumber) {
 		this.dayNumber = dayNumber;
+	}
+
+	public Integer getSegmentIndex() {
+		return segmentIndex;
+	}
+
+	public void setSegmentIndex(Integer segmentIndex) {
+		this.segmentIndex = segmentIndex;
 	}
 
 	public String getBookName() {
