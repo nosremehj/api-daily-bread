@@ -34,6 +34,48 @@ Remove o registro de conclusão desse dia. Se já não estava marcado, a operaç
 
 **Uso no produto:** permitir que o usuário deixe um dia **sem marcar** após uma recuperação parcial, ou corrigir erros.
 
+### 2.1. Várias leituras no mesmo dia — conclusão **por trecho** (obrigatório no UI)
+
+**Problema resolvido:** antes, marcar “Gênesis 1–3” podia contar o dia inteiro; agora o **dia do plano** (calendário, contador “X de N dias”, streak) só avança quando **todos** os trechos daquele `dayNumber` estão marcados.
+
+**Marcar leitura**
+
+- `POST /api/v1/reading-progress/days/read`  
+- Body JSON (campos novos **opcionais**):
+
+| Campo | Tipo | Obrigatório | Significado |
+|--------|------|-------------|-------------|
+| `dayNumber` | `number` | sim | Dia dentro do plano (1…N), como hoje. |
+| `readDate` | `string` (ISO date) | não | Data civil da leitura; omissão = hoje. |
+| `readingPlanDayId` | `number` | não | ID do trecho (`planDayId` na resposta do dashboard / today bible). **Se enviado, marca só esse trecho.** |
+| `segmentIndex` | `number` | não | Índice do bloco quando há **vários** blocos com o **mesmo** `planDayId` (texto legado com `;` numa única linha). Omissão = `0`. |
+
+**Regras para o front:**
+
+1. **Cada cartão / bloco** de “Leitura de hoje” deve chamar o POST com `dayNumber` **e** `readingPlanDayId` (e `segmentIndex` se a API devolver `segmentIndex !== 0` ou se o modelo tiver semicolon-split).
+2. Os valores vêm das respostas:
+   - `GET /api/v1/reading-progress/dashboard` → `today.blocks[]` com `planDayId`, `segmentIndex`, `completed` **por bloco**.
+   - `GET /api/v1/reading-progress/today/bible` → `blocks[]` com os mesmos campos; `dayCompleted` no topo = **dia totalmente fechado** (todos os trechos).
+3. **`completed` por bloco:** refletir no UI (check, cor, etc.) **independentemente** dos outros blocos do mesmo dia.
+4. **`dayCompleted` / contador de dias / calendário:** só devem refletir “dia feito” quando a API indicar dia completo (ex.: `dayCompleted === true` ou ausência de blocos pendentes — o backend já só grava o dia no calendário quando todos os trechos estão ok).
+
+**Marcar o dia inteiro de uma vez** (recuperação, botão global, clientes antigos)
+
+- Enviar **apenas** `dayNumber` e opcionalmente `readDate`, **sem** `readingPlanDayId`.  
+- Comportamento: marca **todos** os trechos daquele dia e fecha o dia no calendário.
+
+**Desmarcar um trecho só**
+
+- `DELETE /api/v1/reading-progress/plan-days/{planDayId}/read?segmentIndex=0`  
+- `segmentIndex` opcional na query; padrão `0`.  
+- Remove só essa conclusão; se não restar trecho marcado naquele dia, o dia **sai** do calendário / contador.
+
+**Desmarcar o dia inteiro** (inalterado)
+
+- `DELETE /api/v1/reading-progress/days/{dayNumber}/read` — remove **todos** os trechos daquele dia e o registro de dia completo.
+
+**Compatibilidade / migração:** utilizadores que já tinham dias marcados na versão antiga recebem, na migração da BD, um registo de trecho por cada linha física do plano naquele dia; dias com uma única linha e texto com `;` podem precisar que o utilizador marque trechos extra até o produto estabilizar (caso raro).
+
 ---
 
 ## 3. Recuperação (catch-up) — um intervalo ou vários

@@ -33,8 +33,10 @@ import com.daily.bread.readingprogress.exceptions.InvalidProgressDateException;
 import com.daily.bread.readingprogress.exceptions.NoActiveEnrollmentException;
 import com.daily.bread.readingprogress.model.UserReadingCompletion;
 import com.daily.bread.readingprogress.model.UserReadingEnrollment;
+import com.daily.bread.readingprogress.model.UserReadingSegmentCompletion;
 import com.daily.bread.readingprogress.repository.UserReadingCompletionRepository;
 import com.daily.bread.readingprogress.repository.UserReadingEnrollmentRepository;
+import com.daily.bread.readingprogress.repository.UserReadingSegmentCompletionRepository;
 import com.daily.bread.readingprogress.request.CatchUpBatchDateRangesRequest;
 import com.daily.bread.readingprogress.request.CatchUpDateRangeRequest;
 import com.daily.bread.readingprogress.request.EnrollReadingPlanRequest;
@@ -63,20 +65,26 @@ public class ReadingProgressService {
 	private final ReadingPlanDayRepository planDayRepository;
 	private final UserReadingEnrollmentRepository enrollmentRepository;
 	private final UserReadingCompletionRepository completionRepository;
+	private final UserReadingSegmentCompletionRepository segmentCompletionRepository;
 	private final BibleService bibleService;
 	private final BibleBookResolver bibleBookResolver;
 
 	public ReadingProgressService(UserRepository userRepository, ReadingPlanRepository planRepository,
 			ReadingPlanDayRepository planDayRepository, UserReadingEnrollmentRepository enrollmentRepository,
-			UserReadingCompletionRepository completionRepository, BibleService bibleService,
+			UserReadingCompletionRepository completionRepository,
+			UserReadingSegmentCompletionRepository segmentCompletionRepository, BibleService bibleService,
 			BibleBookResolver bibleBookResolver) {
 		this.userRepository = userRepository;
 		this.planRepository = planRepository;
 		this.planDayRepository = planDayRepository;
 		this.enrollmentRepository = enrollmentRepository;
 		this.completionRepository = completionRepository;
+		this.segmentCompletionRepository = segmentCompletionRepository;
 		this.bibleService = bibleService;
 		this.bibleBookResolver = bibleBookResolver;
+	}
+
+	private record SegmentSlot(long planDayId, int segmentIndex) {
 	}
 
 	@Transactional
@@ -158,30 +166,33 @@ public class ReadingProgressService {
 		LocalDate scheduledDate = scheduledDateForDay(planStart, scheduledDay);
 		List<ReadingPlanDay> dayRows = planDayRepository.findAllByPlan_IdAndDayNumberOrderBySegmentIndexAsc(plan.getId(),
 				scheduledDay);
-		boolean done = completionRepository.existsByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay);
+		boolean dayCompleted = completionRepository.existsByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay);
 		if (dayRows.isEmpty()) {
-			return new TodayBibleReadingResponse(referenceDate, scheduledDay, scheduledDate, v, done, List.of());
+			return new TodayBibleReadingResponse(referenceDate, scheduledDay, scheduledDate, v, dayCompleted, List.of());
 		}
-		List<TodayBibleBlockResponse> blocks = buildTodayBibleBlocksForScheduledDay(dayRows, v, done);
-		return new TodayBibleReadingResponse(referenceDate, scheduledDay, scheduledDate, v, done, blocks);
+		List<TodayBibleBlockResponse> blocks = buildTodayBibleBlocksForScheduledDay(enrollment.getId(), dayRows, v);
+		return new TodayBibleReadingResponse(referenceDate, scheduledDay, scheduledDate, v, dayCompleted, blocks);
 	}
 
 	/**
 	 * Várias linhas no mesmo dia (novo modelo) ou uma linha legada com {@code ;} no texto.
 	 */
-	private List<TodayBibleBlockResponse> buildTodayBibleBlocksForScheduledDay(List<ReadingPlanDay> rows,
-			String versionId, boolean done) {
+	private List<TodayBibleBlockResponse> buildTodayBibleBlocksForScheduledDay(long enrollmentId,
+			List<ReadingPlanDay> rows, String versionId) {
 		if (rows.size() == 1 && rows.get(0).getReadingText() != null && rows.get(0).getReadingText().contains(";")) {
-			return buildTodayBibleBlocksLegacySemicolonRow(rows.get(0), versionId, done);
+			return buildTodayBibleBlocksLegacySemicolonRow(enrollmentId, rows.get(0), versionId);
 		}
 		List<TodayBibleBlockResponse> blocks = new ArrayList<>(rows.size());
 		for (ReadingPlanDay row : rows) {
-			blocks.add(buildTodayBibleBlockSingleRow(row, versionId, done));
+			blocks.add(buildTodayBibleBlockSingleRow(enrollmentId, row, versionId, 0));
 		}
 		return blocks;
 	}
 
-	private TodayBibleBlockResponse buildTodayBibleBlockSingleRow(ReadingPlanDay d, String versionId, boolean done) {
+	private TodayBibleBlockResponse buildTodayBibleBlockSingleRow(long enrollmentId, ReadingPlanDay d, String versionId,
+			int segmentIndex) {
+		boolean blockDone = segmentCompletionRepository.existsByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(
+				enrollmentId, d.getId(), segmentIndex);
 		Integer bookNum = bibleBookResolver.resolveBookNumber(d.getBookName()).orElse(null);
 		String abbrev = bookNum != null ? bibleBookResolver.abbrevForBook(bookNum).orElse(null) : null;
 		List<BibleChapterResponse> chapters = new ArrayList<>();
@@ -190,18 +201,21 @@ public class ReadingProgressService {
 				chapters.add(bibleService.getChapter(versionId, bookNum, ch));
 			}
 		}
-		return new TodayBibleBlockResponse(d.getId(), d.getDayNumber(), d.getBookName(), bookNum, abbrev,
-				d.getStartChapter(), d.getEndChapter(), d.getReadingText(), done, List.copyOf(chapters));
+		return new TodayBibleBlockResponse(d.getId(), segmentIndex, d.getDayNumber(), d.getBookName(), bookNum, abbrev,
+				d.getStartChapter(), d.getEndChapter(), d.getReadingText(), blockDone, List.copyOf(chapters));
 	}
 
-	private List<TodayBibleBlockResponse> buildTodayBibleBlocksLegacySemicolonRow(ReadingPlanDay d, String versionId,
-			boolean done) {
+	private List<TodayBibleBlockResponse> buildTodayBibleBlocksLegacySemicolonRow(long enrollmentId, ReadingPlanDay d,
+			String versionId) {
 		List<ReadingPlanReadingSegments.Segment> segments = ReadingPlanReadingSegments.parse(d.getReadingText());
 		if (segments.isEmpty()) {
-			return List.of(buildTodayBibleBlockSingleRow(d, versionId, done));
+			return List.of(buildTodayBibleBlockSingleRow(enrollmentId, d, versionId, 0));
 		}
 		List<TodayBibleBlockResponse> blocks = new ArrayList<>(segments.size());
-		for (ReadingPlanReadingSegments.Segment seg : segments) {
+		for (int i = 0; i < segments.size(); i++) {
+			ReadingPlanReadingSegments.Segment seg = segments.get(i);
+			boolean blockDone = segmentCompletionRepository.existsByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(
+					enrollmentId, d.getId(), i);
 			Integer bookNum = bibleBookResolver.resolveBookNumber(seg.bookName()).orElse(null);
 			String abbrev = bookNum != null ? bibleBookResolver.abbrevForBook(bookNum).orElse(null) : null;
 			List<BibleChapterResponse> chapters = new ArrayList<>();
@@ -210,8 +224,8 @@ public class ReadingProgressService {
 					chapters.add(bibleService.getChapter(versionId, bookNum, ch));
 				}
 			}
-			blocks.add(new TodayBibleBlockResponse(d.getId(), d.getDayNumber(), seg.bookName(), bookNum, abbrev,
-					seg.startChapter(), seg.endChapter(), seg.segmentText(), done, List.copyOf(chapters)));
+			blocks.add(new TodayBibleBlockResponse(d.getId(), i, d.getDayNumber(), seg.bookName(), bookNum, abbrev,
+					seg.startChapter(), seg.endChapter(), seg.segmentText(), blockDone, List.copyOf(chapters)));
 		}
 		return blocks;
 	}
@@ -324,34 +338,131 @@ public class ReadingProgressService {
 	public void markDayRead(String username, MarkDayReadRequest request) {
 		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
 				.orElseThrow(NoActiveEnrollmentException::new);
-		int totalDays = (int) planDayRepository.countDistinctDayNumbersByPlan_Id(enrollment.getPlan().getId());
+		long planId = enrollment.getPlan().getId();
+		int totalDays = (int) planDayRepository.countDistinctDayNumbersByPlan_Id(planId);
 		int dayNumber = request.dayNumber();
 		if (dayNumber < 1 || dayNumber > totalDays) {
 			throw new InvalidProgressDateException(
 					"Dia fora do plano. Informe um número entre 1 e " + totalDays + ".");
 		}
 		LocalDate readDate = request.readDate() != null ? request.readDate() : LocalDate.now();
-		UserReadingCompletion row = completionRepository
-				.findByEnrollment_IdAndDayNumber(enrollment.getId(), dayNumber)
-				.orElseGet(UserReadingCompletion::new);
-		if (row.getId() == null) {
-			row.setEnrollment(enrollment);
-			row.setDayNumber(dayNumber);
+		if (request.readingPlanDayId() == null) {
+			markAllSegmentsForDay(enrollment, planId, dayNumber, readDate);
 		}
-		row.setReadDate(readDate);
-		completionRepository.save(row);
+		else {
+			long planDayId = request.readingPlanDayId();
+			int segmentIndex = request.segmentIndex() != null ? request.segmentIndex() : 0;
+			ReadingPlanDay row = planDayRepository.findById(planDayId)
+					.orElseThrow(() -> new InvalidProgressDateException("Trecho de leitura não encontrado."));
+			if (!row.getPlan().getId().equals(planId) || !row.getDayNumber().equals(dayNumber)) {
+				throw new InvalidProgressDateException("O trecho não corresponde a este dia do seu plano.");
+			}
+			boolean slotOk = segmentSlotsForPlanDay(planId, dayNumber).stream()
+					.anyMatch(s -> s.planDayId() == planDayId && s.segmentIndex() == segmentIndex);
+			if (!slotOk) {
+				throw new InvalidProgressDateException("Índice de trecho inválido para este dia.");
+			}
+			upsertSegmentCompletion(enrollment, row, segmentIndex, readDate);
+			syncDayLevelCompletion(enrollment, dayNumber, readDate);
+		}
 	}
 
 	@Transactional
 	public void unmarkDayRead(String username, int dayNumber) {
 		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
 				.orElseThrow(NoActiveEnrollmentException::new);
-		int totalDays = (int) planDayRepository.countDistinctDayNumbersByPlan_Id(enrollment.getPlan().getId());
+		long planId = enrollment.getPlan().getId();
+		int totalDays = (int) planDayRepository.countDistinctDayNumbersByPlan_Id(planId);
 		if (dayNumber < 1 || dayNumber > totalDays) {
 			throw new InvalidProgressDateException(
 					"Dia fora do plano. Informe um número entre 1 e " + totalDays + ".");
 		}
+		segmentCompletionRepository.deleteByEnrollmentAndPlanIdAndDayNumber(enrollment.getId(), planId, dayNumber);
 		completionRepository.deleteByEnrollment_IdAndDayNumber(enrollment.getId(), dayNumber);
+	}
+
+	@Transactional
+	public void unmarkSegmentRead(String username, long readingPlanDayId, int segmentIndex) {
+		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
+				.orElseThrow(NoActiveEnrollmentException::new);
+		ReadingPlanDay row = planDayRepository.findById(readingPlanDayId)
+				.orElseThrow(() -> new InvalidProgressDateException("Trecho de leitura não encontrado."));
+		if (!row.getPlan().getId().equals(enrollment.getPlan().getId())) {
+			throw new InvalidProgressDateException("O trecho não pertence ao seu plano.");
+		}
+		segmentCompletionRepository.deleteByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(enrollment.getId(),
+				readingPlanDayId, segmentIndex);
+		syncDayLevelCompletion(enrollment, row.getDayNumber(), LocalDate.now());
+	}
+
+	private void markAllSegmentsForDay(UserReadingEnrollment enrollment, long planId, int dayNumber, LocalDate readDate) {
+		for (SegmentSlot slot : segmentSlotsForPlanDay(planId, dayNumber)) {
+			ReadingPlanDay row = planDayRepository.findById(slot.planDayId())
+					.orElseThrow(() -> new IllegalStateException("reading_plan_day ausente: " + slot.planDayId()));
+			upsertSegmentCompletion(enrollment, row, slot.segmentIndex(), readDate);
+		}
+		syncDayLevelCompletion(enrollment, dayNumber, readDate);
+	}
+
+	private List<SegmentSlot> segmentSlotsForPlanDay(long planId, int dayNumber) {
+		List<ReadingPlanDay> rows = planDayRepository.findAllByPlan_IdAndDayNumberOrderBySegmentIndexAsc(planId,
+				dayNumber);
+		List<SegmentSlot> slots = new ArrayList<>();
+		if (rows.size() == 1 && rows.get(0).getReadingText() != null && rows.get(0).getReadingText().contains(";")) {
+			ReadingPlanDay d = rows.get(0);
+			List<ReadingPlanReadingSegments.Segment> segments = ReadingPlanReadingSegments.parse(d.getReadingText());
+			if (segments.isEmpty()) {
+				slots.add(new SegmentSlot(d.getId(), 0));
+			}
+			else {
+				for (int i = 0; i < segments.size(); i++) {
+					slots.add(new SegmentSlot(d.getId(), i));
+				}
+			}
+		}
+		else {
+			for (ReadingPlanDay d : rows) {
+				slots.add(new SegmentSlot(d.getId(), 0));
+			}
+		}
+		return slots;
+	}
+
+	private void upsertSegmentCompletion(UserReadingEnrollment enrollment, ReadingPlanDay planDay, int segmentIndex,
+			LocalDate readDate) {
+		UserReadingSegmentCompletion row = segmentCompletionRepository
+				.findByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(enrollment.getId(), planDay.getId(), segmentIndex)
+				.orElseGet(UserReadingSegmentCompletion::new);
+		if (row.getId() == null) {
+			row.setEnrollment(enrollment);
+			row.setReadingPlanDay(planDay);
+			row.setSegmentIndex(segmentIndex);
+		}
+		row.setReadDate(readDate);
+		segmentCompletionRepository.save(row);
+	}
+
+	/**
+	 * Mantém {@link UserReadingCompletion} só quando todos os trechos do dia estão marcados (calendário / progresso).
+	 */
+	private void syncDayLevelCompletion(UserReadingEnrollment enrollment, int dayNumber, LocalDate readDateForCompletion) {
+		long planId = enrollment.getPlan().getId();
+		List<SegmentSlot> slots = segmentSlotsForPlanDay(planId, dayNumber);
+		for (SegmentSlot slot : slots) {
+			if (!segmentCompletionRepository.existsByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(enrollment.getId(),
+					slot.planDayId(), slot.segmentIndex())) {
+				completionRepository.deleteByEnrollment_IdAndDayNumber(enrollment.getId(), dayNumber);
+				return;
+			}
+		}
+		UserReadingCompletion row = completionRepository.findByEnrollment_IdAndDayNumber(enrollment.getId(), dayNumber)
+				.orElseGet(UserReadingCompletion::new);
+		if (row.getId() == null) {
+			row.setEnrollment(enrollment);
+			row.setDayNumber(dayNumber);
+		}
+		row.setReadDate(readDateForCompletion);
+		completionRepository.save(row);
 	}
 
 	@Transactional
@@ -385,22 +496,15 @@ public class ReadingProgressService {
 	private void catchUpRangeForEnrollment(UserReadingEnrollment enrollment, LocalDate fromInclusive,
 			LocalDate toInclusive) {
 		LocalDate planStart = enrollment.getPlanStartDate();
-		long totalDaysLong = planDayRepository.countDistinctDayNumbersByPlan_Id(enrollment.getPlan().getId());
+		long planId = enrollment.getPlan().getId();
+		long totalDaysLong = planDayRepository.countDistinctDayNumbersByPlan_Id(planId);
 		int totalDays = (int) totalDaysLong;
 		for (LocalDate d = fromInclusive; !d.isAfter(toInclusive); d = d.plusDays(1)) {
 			int dayNumber = dayNumberForPlanDate(planStart, d);
 			if (dayNumber < 1 || dayNumber > totalDays) {
 				continue;
 			}
-			UserReadingCompletion row = completionRepository
-					.findByEnrollment_IdAndDayNumber(enrollment.getId(), dayNumber)
-					.orElseGet(UserReadingCompletion::new);
-			if (row.getId() == null) {
-				row.setEnrollment(enrollment);
-				row.setDayNumber(dayNumber);
-			}
-			row.setReadDate(d);
-			completionRepository.save(row);
+			markAllSegmentsForDay(enrollment, planId, dayNumber, d);
 		}
 	}
 
@@ -416,17 +520,11 @@ public class ReadingProgressService {
 		if (lastDay > totalDays) {
 			lastDay = totalDays;
 		}
-		IntStream.rangeClosed(1, lastDay).forEach(dayNumber -> {
+		long planId = enrollment.getPlan().getId();
+		int bound = lastDay;
+		IntStream.rangeClosed(1, bound).forEach(dayNumber -> {
 			LocalDate scheduled = scheduledDateForDay(planStart, dayNumber);
-			UserReadingCompletion row = completionRepository
-					.findByEnrollment_IdAndDayNumber(enrollment.getId(), dayNumber)
-					.orElseGet(UserReadingCompletion::new);
-			if (row.getId() == null) {
-				row.setEnrollment(enrollment);
-				row.setDayNumber(dayNumber);
-			}
-			row.setReadDate(scheduled);
-			completionRepository.save(row);
+			markAllSegmentsForDay(enrollment, planId, dayNumber, scheduled);
 		});
 	}
 
@@ -440,13 +538,13 @@ public class ReadingProgressService {
 		LocalDate scheduledDate = scheduledDateForDay(planStart, scheduledDay);
 		List<ReadingPlanDay> dayRows = planDayRepository.findAllByPlan_IdAndDayNumberOrderBySegmentIndexAsc(planId,
 				scheduledDay);
-		boolean done = completionRepository.existsByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay);
-		List<TodayReadingBlockResponse> blocks = buildTodayReadingSectionBlocksForScheduledDay(dayRows, done);
+		List<TodayReadingBlockResponse> blocks = buildTodayReadingSectionBlocksForScheduledDay(enrollment.getId(),
+				dayRows);
 		return new TodayReadingSectionResponse(ref, scheduledDay, scheduledDate, blocks);
 	}
 
-	private List<TodayReadingBlockResponse> buildTodayReadingSectionBlocksForScheduledDay(List<ReadingPlanDay> rows,
-			boolean done) {
+	private List<TodayReadingBlockResponse> buildTodayReadingSectionBlocksForScheduledDay(long enrollmentId,
+			List<ReadingPlanDay> rows) {
 		if (rows.isEmpty()) {
 			return List.of();
 		}
@@ -458,20 +556,25 @@ public class ReadingProgressService {
 						d.getEndChapter(), d.getReadingText()));
 			}
 			List<TodayReadingBlockResponse> blocks = new ArrayList<>(segments.size());
-			for (ReadingPlanReadingSegments.Segment seg : segments) {
+			for (int i = 0; i < segments.size(); i++) {
+				ReadingPlanReadingSegments.Segment seg = segments.get(i);
+				boolean blockDone = segmentCompletionRepository.existsByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(
+						enrollmentId, d.getId(), i);
 				Integer bookNum = bibleBookResolver.resolveBookNumber(seg.bookName()).orElse(null);
 				String abbrev = bookNum != null ? bibleBookResolver.abbrevForBook(bookNum).orElse(null) : null;
-				blocks.add(new TodayReadingBlockResponse(d.getId(), d.getDayNumber(), seg.bookName(), bookNum, abbrev,
-						seg.startChapter(), seg.endChapter(), seg.segmentText(), done));
+				blocks.add(new TodayReadingBlockResponse(d.getId(), i, d.getDayNumber(), seg.bookName(), bookNum, abbrev,
+						seg.startChapter(), seg.endChapter(), seg.segmentText(), blockDone));
 			}
 			return blocks;
 		}
 		List<TodayReadingBlockResponse> blocks = new ArrayList<>(rows.size());
 		for (ReadingPlanDay d : rows) {
+			boolean blockDone = segmentCompletionRepository.existsByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(
+					enrollmentId, d.getId(), 0);
 			Integer bookNum = bibleBookResolver.resolveBookNumber(d.getBookName()).orElse(null);
 			String abbrev = bookNum != null ? bibleBookResolver.abbrevForBook(bookNum).orElse(null) : null;
-			blocks.add(new TodayReadingBlockResponse(d.getId(), d.getDayNumber(), d.getBookName(), bookNum, abbrev,
-					d.getStartChapter(), d.getEndChapter(), d.getReadingText(), done));
+			blocks.add(new TodayReadingBlockResponse(d.getId(), 0, d.getDayNumber(), d.getBookName(), bookNum, abbrev,
+					d.getStartChapter(), d.getEndChapter(), d.getReadingText(), blockDone));
 		}
 		return blocks;
 	}

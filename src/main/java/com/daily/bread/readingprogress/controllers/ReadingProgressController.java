@@ -98,6 +98,13 @@ public class ReadingProgressController {
 		readingProgressService.unmarkDayRead(authentication.getName(), dayNumber);
 	}
 
+	@DeleteMapping("/plan-days/{planDayId}/read")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void unmarkSegmentRead(Authentication authentication, @PathVariable long planDayId,
+			@RequestParam(defaultValue = "0") int segmentIndex) {
+		readingProgressService.unmarkSegmentRead(authentication.getName(), planDayId, segmentIndex);
+	}
+
 	@PostMapping("/catch-up/date-range")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void catchUpRange(Authentication authentication, @Valid @RequestBody CatchUpDateRangeRequest request) {
