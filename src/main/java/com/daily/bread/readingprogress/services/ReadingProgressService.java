@@ -364,6 +364,12 @@ public class ReadingProgressService {
 		}
 
 		boolean hasMissedDaysInPeriod = daysMissed > 0;
+		List<LocalDate> readOnTimeInPeriod = new ArrayList<>();
+		for (LocalDate d = periodFrom; !d.isAfter(periodTo); d = d.plusDays(1)) {
+			if (onTimeReadDates.contains(d)) {
+				readOnTimeInPeriod.add(d);
+			}
+		}
 		List<LocalDate> readWithDelayInPeriod = new ArrayList<>();
 		for (LocalDate d = periodFrom; !d.isAfter(periodTo); d = d.plusDays(1)) {
 			if (!scheduledPlanDayInRange(d, planStart, totalDays)) {
@@ -373,10 +379,25 @@ public class ReadingProgressService {
 				readWithDelayInPeriod.add(d);
 			}
 		}
+		List<LocalDate> missedScheduledList = new ArrayList<>();
+		if (!missedThrough.isBefore(periodFrom)) {
+			for (LocalDate d = periodFrom; !d.isAfter(missedThrough); d = d.plusDays(1)) {
+				if (!scheduledPlanDayInRange(d, planStart, totalDays)) {
+					continue;
+				}
+				if (!readInPeriod.contains(d)) {
+					missedScheduledList.add(d);
+				}
+			}
+		}
+		int daysReadOnTime = readOnTimeInPeriod.size();
+		int daysReadWithDelay = readWithDelayInPeriod.size();
 		return new ReadingStatisticsResponse(plan.getId(), plan.getOriginalFilename(), planStart, periodFrom, periodTo,
 				totalDays, (int) completedDays, daysReadInPeriod, daysMissed, hasMissedDaysInPeriod, currentStreak,
-				longestStreak, annualPercent, Collections.unmodifiableList(readDatesList),
-				Collections.unmodifiableList(readWithDelayInPeriod), nextMilestonePercent, daysUntilNextMilestone);
+				longestStreak, annualPercent, Collections.unmodifiableList(readDatesList), daysReadOnTime,
+				daysReadWithDelay, Collections.unmodifiableList(readOnTimeInPeriod),
+				Collections.unmodifiableList(readWithDelayInPeriod), Collections.unmodifiableList(missedScheduledList),
+				nextMilestonePercent, daysUntilNextMilestone);
 	}
 
 	private static void validateInclusiveDateRange(LocalDate fromInclusive, LocalDate toInclusive) {
