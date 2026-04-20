@@ -32,6 +32,10 @@ public class UserReadingCompletion {
 	@Column(name = "read_date", nullable = false)
 	private LocalDate readDate;
 
+	/** Leitura concluída fora do dia agendado no sentido de disciplina (ex.: recuperação tardia com {@code readDate} no slot). */
+	@Column(name = "read_with_delay", nullable = false)
+	private boolean readWithDelay;
+
 	public Long getId() {
 		return id;
 	}
@@ -58,5 +62,13 @@ public class UserReadingCompletion {
 
 	public void setReadDate(LocalDate readDate) {
 		this.readDate = readDate;
+	}
+
+	public boolean isReadWithDelay() {
+		return readWithDelay;
+	}
+
+	public void setReadWithDelay(boolean readWithDelay) {
+		this.readWithDelay = readWithDelay;
 	}
 }

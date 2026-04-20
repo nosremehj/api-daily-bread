@@ -1,6 +1,7 @@
 package com.daily.bread.readingprogress.repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -22,6 +23,8 @@ public interface UserReadingCompletionRepository extends JpaRepository<UserReadi
 	Set<LocalDate> findAllDistinctReadDates(@Param("enrollmentId") Long enrollmentId);
 
 	void deleteByEnrollment_Id(Long enrollmentId);
+
+	List<UserReadingCompletion> findAllByEnrollment_Id(Long enrollmentId);
 
 	boolean existsByEnrollment_IdAndDayNumber(Long enrollmentId, int dayNumber);
 

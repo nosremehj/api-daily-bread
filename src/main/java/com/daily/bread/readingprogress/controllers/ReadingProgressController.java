@@ -20,6 +20,7 @@ import com.daily.bread.readingprogress.request.CatchUpBatchDateRangesRequest;
 import com.daily.bread.readingprogress.request.CatchUpDateRangeRequest;
 import com.daily.bread.readingprogress.request.EnrollReadingPlanRequest;
 import com.daily.bread.readingprogress.request.MarkDayReadRequest;
+import com.daily.bread.readingprogress.response.CalendarDayDetailResponse;
 import com.daily.bread.readingprogress.response.CalendarDayReadResponse;
 import com.daily.bread.readingprogress.response.EnrollmentSummaryResponse;
 import com.daily.bread.readingprogress.response.ReadingProgressDashboardResponse;
@@ -78,6 +79,11 @@ public class ReadingProgressController {
 	@GetMapping("/calendar/year")
 	public List<CalendarDayReadResponse> calendarYear(Authentication authentication, @RequestParam int year) {
 		return readingProgressService.calendarYear(authentication.getName(), year);
+	}
+
+	@GetMapping("/calendar/day")
+	public CalendarDayDetailResponse calendarDayDetail(Authentication authentication, @RequestParam LocalDate date) {
+		return readingProgressService.calendarDayDetail(authentication.getName(), date);
 	}
 
 	@GetMapping("/statistics")

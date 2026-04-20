@@ -7,11 +7,13 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import org.springframework.stereotype.Service;
@@ -41,6 +43,7 @@ import com.daily.bread.readingprogress.request.CatchUpBatchDateRangesRequest;
 import com.daily.bread.readingprogress.request.CatchUpDateRangeRequest;
 import com.daily.bread.readingprogress.request.EnrollReadingPlanRequest;
 import com.daily.bread.readingprogress.request.MarkDayReadRequest;
+import com.daily.bread.readingprogress.response.CalendarDayDetailResponse;
 import com.daily.bread.readingprogress.response.CalendarDayReadResponse;
 import com.daily.bread.readingprogress.response.EnrollmentSummaryResponse;
 import com.daily.bread.readingprogress.response.ReadingProgressDashboardResponse;
@@ -136,17 +139,21 @@ public class ReadingProgressService {
 		int totalDays = (int) totalDaysLong;
 		long completedDays = completionRepository.countByEnrollment_Id(enrollment.getId());
 		int percent = totalDays == 0 ? 0 : (int) Math.round(100.0 * completedDays / totalDays);
-		Set<LocalDate> allReadDates = completionRepository.findAllDistinctReadDates(enrollment.getId());
-		int streak = currentStreakDays(allReadDates, ref);
+		LocalDate planStart = enrollment.getPlanStartDate();
+		Set<LocalDate> onTimeReadDates = loadOnTimeStreakReadDates(enrollment.getId(), planStart, totalDays);
+		int streak = currentStreakDays(onTimeReadDates, ref);
 		int daysLeftInYear = (int) ChronoUnit.DAYS.between(ref, ref.with(TemporalAdjusters.lastDayOfYear()));
 		LocalDate weekStart = ref.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
 		LocalDate weekEnd = weekStart.plusDays(6);
-		Set<LocalDate> weekReads = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), weekStart,
+		Set<LocalDate> weekAnyReads = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), weekStart,
 				weekEnd);
-		List<WeekDayStripItemResponse> strip = buildWeekStrip(weekStart, ref, weekReads);
+		List<WeekDayStripItemResponse> strip = buildWeekStrip(weekStart, ref, onTimeReadDates, weekAnyReads, planStart,
+				totalDays);
+		List<LocalDate> readWithDelayWeek = strip.stream().filter(WeekDayStripItemResponse::readWithDelay)
+				.map(WeekDayStripItemResponse::date).collect(Collectors.toUnmodifiableList());
 		TodayReadingSectionResponse today = buildTodaySection(enrollment, plan.getId(), totalDays, ref);
 		return new ReadingProgressDashboardResponse(plan.getId(), plan.getOriginalFilename(), totalDays,
-				(int) completedDays, percent, streak, daysLeftInYear, strip, today);
+				(int) completedDays, percent, streak, daysLeftInYear, strip, readWithDelayWeek, today);
 	}
 
 	@Transactional(readOnly = true)
@@ -238,11 +245,17 @@ public class ReadingProgressService {
 		validateInclusiveDateRange(fromInclusive, toInclusive);
 		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
 				.orElseThrow(NoActiveEnrollmentException::new);
+		LocalDate planStart = enrollment.getPlanStartDate();
+		int totalDays = (int) planDayRepository.countDistinctDayNumbersByPlan_Id(enrollment.getPlan().getId());
 		Set<LocalDate> readDates = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), fromInclusive,
 				toInclusive);
+		Set<LocalDate> onTimeReadDates = loadOnTimeStreakReadDates(enrollment.getId(), planStart, totalDays);
 		List<CalendarDayReadResponse> out = new ArrayList<>();
 		for (LocalDate d = fromInclusive; !d.isAfter(toInclusive); d = d.plusDays(1)) {
-			out.add(new CalendarDayReadResponse(d, readDates.contains(d)));
+			boolean read = readDates.contains(d);
+			boolean readWithDelay = read && scheduledPlanDayInRange(d, planStart, totalDays)
+					&& !onTimeReadDates.contains(d);
+			out.add(new CalendarDayReadResponse(d, read, readWithDelay));
 		}
 		return out;
 	}
@@ -255,6 +268,40 @@ public class ReadingProgressService {
 		LocalDate fromInclusive = LocalDate.of(year, 1, 1);
 		LocalDate toInclusive = LocalDate.of(year, 12, 31);
 		return calendar(username, fromInclusive, toInclusive);
+	}
+
+	/**
+	 * Detalhe de um dia do calendário: se houve leitura registrada na data civil e qual o plano agendado
+	 * (livro/capitulo, IDs para navegação), sem carregar capítulos da Bíblia.
+	 */
+	@Transactional(readOnly = true)
+	public CalendarDayDetailResponse calendarDayDetail(String username, LocalDate date) {
+		if (date == null) {
+			throw new InvalidProgressDateException("Informe date (ISO-8601).");
+		}
+		UserReadingEnrollment enrollment = enrollmentRepository.findByUser_Id(user(username).getId())
+				.orElseThrow(NoActiveEnrollmentException::new);
+		ReadingPlan plan = enrollment.getPlan();
+		long planId = plan.getId();
+		int totalDays = (int) planDayRepository.countDistinctDayNumbersByPlan_Id(planId);
+		LocalDate planStart = enrollment.getPlanStartDate();
+		Set<LocalDate> readOnDate = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), date, date);
+		boolean read = readOnDate.contains(date);
+		int scheduledDay = dayNumberForPlanDate(planStart, date);
+		if (scheduledDay < 1 || scheduledDay > totalDays) {
+			return new CalendarDayDetailResponse(date, read, false, null, null, false, List.of());
+		}
+		LocalDate scheduledDate = scheduledDateForDay(planStart, scheduledDay);
+		boolean readOnTime = completionRepository.findByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay)
+				.map(c -> c.getReadDate().equals(date) && !c.isReadWithDelay()).orElse(false);
+		boolean readWithDelay = read && !readOnTime;
+		boolean dayCompleted = completionRepository.existsByEnrollment_IdAndDayNumber(enrollment.getId(), scheduledDay);
+		List<ReadingPlanDay> dayRows = planDayRepository.findAllByPlan_IdAndDayNumberOrderBySegmentIndexAsc(planId,
+				scheduledDay);
+		List<TodayReadingBlockResponse> blocks = buildTodayReadingSectionBlocksForScheduledDay(enrollment.getId(),
+				dayRows);
+		return new CalendarDayDetailResponse(date, read, readWithDelay, scheduledDay, scheduledDate, dayCompleted,
+				blocks);
 	}
 
 	@Transactional(readOnly = true)
@@ -278,10 +325,10 @@ public class ReadingProgressService {
 		}
 		validateInclusiveDateRange(periodFrom, periodTo);
 
-		Set<LocalDate> allReadDates = completionRepository.findAllDistinctReadDates(enrollment.getId());
+		Set<LocalDate> onTimeReadDates = loadOnTimeStreakReadDates(enrollment.getId(), planStart, totalDays);
 		LocalDate streakRef = periodTo.isAfter(today) ? today : periodTo;
-		int currentStreak = currentStreakDays(allReadDates, streakRef);
-		int longestStreak = longestStreakDays(allReadDates);
+		int currentStreak = currentStreakDays(onTimeReadDates, streakRef);
+		int longestStreak = longestStreakDays(onTimeReadDates);
 
 		Set<LocalDate> readInPeriod = completionRepository.findDistinctReadDatesBetween(enrollment.getId(), periodFrom,
 				periodTo);
@@ -317,10 +364,19 @@ public class ReadingProgressService {
 		}
 
 		boolean hasMissedDaysInPeriod = daysMissed > 0;
+		List<LocalDate> readWithDelayInPeriod = new ArrayList<>();
+		for (LocalDate d = periodFrom; !d.isAfter(periodTo); d = d.plusDays(1)) {
+			if (!scheduledPlanDayInRange(d, planStart, totalDays)) {
+				continue;
+			}
+			if (readInPeriod.contains(d) && !onTimeReadDates.contains(d)) {
+				readWithDelayInPeriod.add(d);
+			}
+		}
 		return new ReadingStatisticsResponse(plan.getId(), plan.getOriginalFilename(), planStart, periodFrom, periodTo,
 				totalDays, (int) completedDays, daysReadInPeriod, daysMissed, hasMissedDaysInPeriod, currentStreak,
-				longestStreak, annualPercent, Collections.unmodifiableList(readDatesList), nextMilestonePercent,
-				daysUntilNextMilestone);
+				longestStreak, annualPercent, Collections.unmodifiableList(readDatesList),
+				Collections.unmodifiableList(readWithDelayInPeriod), nextMilestonePercent, daysUntilNextMilestone);
 	}
 
 	private static void validateInclusiveDateRange(LocalDate fromInclusive, LocalDate toInclusive) {
@@ -346,8 +402,10 @@ public class ReadingProgressService {
 					"Dia fora do plano. Informe um número entre 1 e " + totalDays + ".");
 		}
 		LocalDate readDate = request.readDate() != null ? request.readDate() : LocalDate.now();
+		boolean readWithDelay = resolveReadWithDelayFlag(request.readWithDelay(), enrollment.getPlanStartDate(),
+				dayNumber, readDate);
 		if (request.readingPlanDayId() == null) {
-			markAllSegmentsForDay(enrollment, planId, dayNumber, readDate);
+			markAllSegmentsForDay(enrollment, planId, dayNumber, readDate, readWithDelay);
 		}
 		else {
 			long planDayId = request.readingPlanDayId();
@@ -363,7 +421,7 @@ public class ReadingProgressService {
 				throw new InvalidProgressDateException("Índice de trecho inválido para este dia.");
 			}
 			upsertSegmentCompletion(enrollment, row, segmentIndex, readDate);
-			syncDayLevelCompletion(enrollment, dayNumber, readDate);
+			syncDayLevelCompletion(enrollment, dayNumber, readDate, readWithDelay);
 		}
 	}
 
@@ -392,16 +450,17 @@ public class ReadingProgressService {
 		}
 		segmentCompletionRepository.deleteByEnrollment_IdAndReadingPlanDay_IdAndSegmentIndex(enrollment.getId(),
 				readingPlanDayId, segmentIndex);
-		syncDayLevelCompletion(enrollment, row.getDayNumber(), LocalDate.now());
+		syncDayLevelCompletion(enrollment, row.getDayNumber(), LocalDate.now(), null);
 	}
 
-	private void markAllSegmentsForDay(UserReadingEnrollment enrollment, long planId, int dayNumber, LocalDate readDate) {
+	private void markAllSegmentsForDay(UserReadingEnrollment enrollment, long planId, int dayNumber, LocalDate readDate,
+			boolean readWithDelay) {
 		for (SegmentSlot slot : segmentSlotsForPlanDay(planId, dayNumber)) {
 			ReadingPlanDay row = planDayRepository.findById(slot.planDayId())
 					.orElseThrow(() -> new IllegalStateException("reading_plan_day ausente: " + slot.planDayId()));
 			upsertSegmentCompletion(enrollment, row, slot.segmentIndex(), readDate);
 		}
-		syncDayLevelCompletion(enrollment, dayNumber, readDate);
+		syncDayLevelCompletion(enrollment, dayNumber, readDate, readWithDelay);
 	}
 
 	private List<SegmentSlot> segmentSlotsForPlanDay(long planId, int dayNumber) {
@@ -445,7 +504,11 @@ public class ReadingProgressService {
 	/**
 	 * Mantém {@link UserReadingCompletion} só quando todos os trechos do dia estão marcados (calendário / progresso).
 	 */
-	private void syncDayLevelCompletion(UserReadingEnrollment enrollment, int dayNumber, LocalDate readDateForCompletion) {
+	/**
+	 * @param readWithDelayOverride {@code null} = calcular por {@code readDate} vs data agendada do {@code dayNumber}.
+	 */
+	private void syncDayLevelCompletion(UserReadingEnrollment enrollment, int dayNumber, LocalDate readDateForCompletion,
+			Boolean readWithDelayOverride) {
 		long planId = enrollment.getPlan().getId();
 		List<SegmentSlot> slots = segmentSlotsForPlanDay(planId, dayNumber);
 		for (SegmentSlot slot : slots) {
@@ -462,7 +525,24 @@ public class ReadingProgressService {
 			row.setDayNumber(dayNumber);
 		}
 		row.setReadDate(readDateForCompletion);
+		boolean delay = readWithDelayOverride != null ? readWithDelayOverride
+				: inferReadWithDelayByDates(enrollment.getPlanStartDate(), dayNumber, readDateForCompletion);
+		row.setReadWithDelay(delay);
 		completionRepository.save(row);
+	}
+
+	private static boolean resolveReadWithDelayFlag(Boolean requestFlag, LocalDate planStart, int dayNumber,
+			LocalDate readDate) {
+		if (requestFlag != null) {
+			return requestFlag;
+		}
+		return inferReadWithDelayByDates(planStart, dayNumber, readDate);
+	}
+
+	/** Atraso quando a data registrada não é a data civil prevista para esse {@code dayNumber}. */
+	private static boolean inferReadWithDelayByDates(LocalDate planStart, int dayNumber, LocalDate readDate) {
+		LocalDate scheduled = scheduledDateForDay(planStart, dayNumber);
+		return !readDate.equals(scheduled);
 	}
 
 	@Transactional
@@ -504,7 +584,7 @@ public class ReadingProgressService {
 			if (dayNumber < 1 || dayNumber > totalDays) {
 				continue;
 			}
-			markAllSegmentsForDay(enrollment, planId, dayNumber, d);
+			markAllSegmentsForDay(enrollment, planId, dayNumber, d, false);
 		}
 	}
 
@@ -524,7 +604,7 @@ public class ReadingProgressService {
 		int bound = lastDay;
 		IntStream.rangeClosed(1, bound).forEach(dayNumber -> {
 			LocalDate scheduled = scheduledDateForDay(planStart, dayNumber);
-			markAllSegmentsForDay(enrollment, planId, dayNumber, scheduled);
+			markAllSegmentsForDay(enrollment, planId, dayNumber, scheduled, false);
 		});
 	}
 
@@ -579,14 +659,28 @@ public class ReadingProgressService {
 		return blocks;
 	}
 
+	private Set<LocalDate> loadOnTimeStreakReadDates(long enrollmentId, LocalDate planStart, int totalDays) {
+		List<UserReadingCompletion> rows = completionRepository.findAllByEnrollment_Id(enrollmentId);
+		return onTimeReadCivilDates(planStart, totalDays, rows);
+	}
+
+	private static boolean scheduledPlanDayInRange(LocalDate civilDate, LocalDate planStart, int totalPlanDays) {
+		int n = dayNumberForPlanDate(planStart, civilDate);
+		return n >= 1 && n <= totalPlanDays;
+	}
+
 	private List<WeekDayStripItemResponse> buildWeekStrip(LocalDate weekStart, LocalDate today,
-			Set<LocalDate> weekReads) {
+			Set<LocalDate> onTimeReadDates, Set<LocalDate> anyReadDatesInWeek, LocalDate planStart, int totalPlanDays) {
 		List<WeekDayStripItemResponse> items = new ArrayList<>(7);
 		for (int i = 0; i < 7; i++) {
 			LocalDate d = weekStart.plusDays(i);
 			String label = d.getDayOfWeek().getDisplayName(TextStyle.SHORT_STANDALONE, PT_BR);
+			boolean inPlan = scheduledPlanDayInRange(d, planStart, totalPlanDays);
+			boolean onTime = inPlan && onTimeReadDates.contains(d);
+			boolean anyRead = anyReadDatesInWeek.contains(d);
+			boolean readWithDelay = inPlan && anyRead && !onTime;
 			WeekStripDayStatus status;
-			if (weekReads.contains(d)) {
+			if (onTime) {
 				status = WeekStripDayStatus.COMPLETED;
 			}
 			else if (d.isAfter(today)) {
@@ -598,9 +692,30 @@ public class ReadingProgressService {
 			else {
 				status = WeekStripDayStatus.MISSED;
 			}
-			items.add(new WeekDayStripItemResponse(d, d.getDayOfMonth(), label, status));
+			items.add(new WeekDayStripItemResponse(d, d.getDayOfMonth(), label, status, readWithDelay));
 		}
 		return items;
+	}
+
+	/**
+	 * Datas civis em que o dia do plano foi concluído <strong>no dia agendado</strong>
+	 * ({@code readDate} = data civil prevista para o {@code dayNumber}). Atrasos e recuperações com outra
+	 * {@code readDate} não entram na sequência nem “fecham” buracos retroativos.
+	 */
+	static Set<LocalDate> onTimeReadCivilDates(LocalDate planStart, int totalDays,
+			List<UserReadingCompletion> completions) {
+		Set<LocalDate> out = new HashSet<>();
+		for (UserReadingCompletion c : completions) {
+			int dn = c.getDayNumber();
+			if (dn < 1 || dn > totalDays) {
+				continue;
+			}
+			LocalDate scheduled = scheduledDateForDay(planStart, dn);
+			if (c.getReadDate().equals(scheduled) && !c.isReadWithDelay()) {
+				out.add(scheduled);
+			}
+		}
+		return Set.copyOf(out);
 	}
 
 	private EnrollmentSummaryResponse toSummary(UserReadingEnrollment e) {
