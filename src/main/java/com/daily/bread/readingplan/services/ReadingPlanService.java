@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,14 +36,17 @@ public class ReadingPlanService {
 	private final ReadingPlanPdfParser pdfParser;
 	private final BibleBookResolver bibleBookResolver;
 	private final BibleService bibleService;
+	private final boolean includePdfExtractPreview;
 
 	public ReadingPlanService(ReadingPlanRepository planRepository, ReadingPlanDayRepository dayRepository,
-			ReadingPlanPdfParser pdfParser, BibleBookResolver bibleBookResolver, BibleService bibleService) {
+			ReadingPlanPdfParser pdfParser, BibleBookResolver bibleBookResolver, BibleService bibleService,
+			@Value("${bread.reading-plan.include-pdf-extract-preview:false}") boolean includePdfExtractPreview) {
 		this.planRepository = planRepository;
 		this.dayRepository = dayRepository;
 		this.pdfParser = pdfParser;
 		this.bibleBookResolver = bibleBookResolver;
 		this.bibleService = bibleService;
+		this.includePdfExtractPreview = includePdfExtractPreview;
 	}
 
 	@Transactional
@@ -69,7 +73,8 @@ public class ReadingPlanService {
 			throw new ReadingPlanDuplicateException(id);
 		});
 
-		List<ParsedPlanRow> parsed = pdfParser.parse(bytes);
+		ReadingPlanPdfExtractBundle bundle = pdfParser.parseBundled(bytes);
+		List<ParsedPlanRow> parsed = bundle.rows();
 
 		ReadingPlan plan = new ReadingPlan();
 		plan.setOriginalFilename(name);
@@ -101,8 +106,9 @@ public class ReadingPlanService {
 		}
 		ReadingPlan saved = planRepository.save(plan);
 		int calendarDays = (int) parsed.stream().mapToInt(ParsedPlanRow::dayNumber).distinct().count();
+		List<String> preview = includePdfExtractPreview ? bundle.relevantPreviewLines() : List.of();
 		return new ReadingPlanImportResponse(saved.getId(), saved.getOriginalFilename(), saved.getImportedAt(),
-				calendarDays, parsed.size());
+				calendarDays, parsed.size(), preview);
 	}
 
 	@Transactional(readOnly = true)

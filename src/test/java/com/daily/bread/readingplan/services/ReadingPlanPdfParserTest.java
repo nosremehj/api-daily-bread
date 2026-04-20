@@ -98,6 +98,36 @@ class ReadingPlanPdfParserTest {
 	}
 
 	@Test
+	void repair_gluedChapterEndToNextDay_d12_ezekiel257_258() {
+		String line = "257 Ezequiel 34-36258 Ezequiel 37-39";
+		List<ParsedPlanRow> rows = parser.parsePlainText(line);
+		assertThat(rows).hasSize(2);
+		assertThat(rows.get(0)).satisfies(r -> {
+			assertThat(r.dayNumber()).isEqualTo(257);
+			assertThat(r.bookName()).isEqualTo("Ezequiel");
+			assertThat(r.startChapter()).isEqualTo(34);
+			assertThat(r.endChapter()).isEqualTo(36);
+		});
+		assertThat(rows.get(1)).satisfies(r -> {
+			assertThat(r.dayNumber()).isEqualTo(258);
+			assertThat(r.bookName()).isEqualTo("Ezequiel");
+			assertThat(r.startChapter()).isEqualTo(37);
+			assertThat(r.endChapter()).isEqualTo(39);
+		});
+	}
+
+	@Test
+	void lowercaseBookName_getsLeadingCapitalLikePdfExtraction() {
+		List<ParsedPlanRow> rows = parser.parsePlainText("258 ezequiel 37-39");
+		assertThat(rows).singleElement().satisfies(r -> {
+			assertThat(r.dayNumber()).isEqualTo(258);
+			assertThat(r.bookName()).isEqualTo("Ezequiel");
+			assertThat(r.startChapter()).isEqualTo(37);
+			assertThat(r.endChapter()).isEqualTo(39);
+		});
+	}
+
+	@Test
 	void mergedPdfLine_doesNotAttachNextDayChaptersToPreviousDay() {
 		String line = "274 Obadias e Jonas 305 Lucas 16-18";
 		List<ParsedPlanRow> rows = parser.parsePlainText(line);
@@ -166,6 +196,66 @@ class ReadingPlanPdfParserTest {
 	}
 
 	@Test
+	void day358_plusAndE_sameLine_threeWholeBooks() {
+		List<ParsedPlanRow> rows = parser.parsePlainText("358 II e III João + Judas");
+		assertThat(rows).hasSize(3);
+		assertThat(rows).allMatch(r -> r.dayNumber() == 358);
+		assertThat(rows).extracting(ParsedPlanRow::bookName).containsExactly("II João", "III João", "Judas");
+	}
+
+	@Test
+	void day358_typographicRomanNumerals_andFullwidthPlus_pdfBox() {
+		String line = "358 \u2161 e \u2162 Jo\u00e3o \uFF0B Judas";
+		List<ParsedPlanRow> rows = parser.parsePlainText(line);
+		assertThat(rows).hasSize(3);
+		assertThat(rows).allMatch(r -> r.dayNumber() == 358);
+		assertThat(rows).extracting(ParsedPlanRow::bookName).containsExactly("II João", "III João", "Judas");
+	}
+
+	@Test
+	void dayIndexOnOwnLine_thenReading_nextLine_pdfTableExtraction() {
+		String text = """
+				357 I João 1-5
+				358
+				II e III João + Judas
+				359 Apocalipse 1-3
+				""";
+		List<ParsedPlanRow> rows = parser.parsePlainText(text);
+		List<ParsedPlanRow> d358 = rows.stream().filter(r -> r.dayNumber() == 358).toList();
+		assertThat(d358).hasSize(3);
+		assertThat(d358).extracting(ParsedPlanRow::bookName).containsExactly("II João", "III João", "Judas");
+	}
+
+	@Test
+	void day359Before358Reading_reorderedPdfColumn_extractsSandwiched358() {
+		String text = """
+				357 I João 1-5
+				359 Apocalipse 1-3
+				II e III João + Judas
+				360 Apocalipse 4-6
+				""";
+		List<ParsedPlanRow> rows = parser.parsePlainText(text);
+		assertThat(rows.stream().filter(r -> r.dayNumber() == 358)).hasSize(3)
+				.extracting(ParsedPlanRow::bookName).containsExactly("II João", "III João", "Judas");
+		assertThat(rows.stream().filter(r -> r.dayNumber() == 359).map(ParsedPlanRow::bookName))
+				.containsExactly("Apocalipse");
+	}
+
+	@Test
+	void twoConsecutiveDayOnlyLines_fifoAssignsReadingsToEach() {
+		String text = """
+				358
+				359
+				II e III João + Judas
+				Apocalipse 1-3
+				""";
+		List<ParsedPlanRow> rows = parser.parsePlainText(text);
+		assertThat(rows.stream().filter(r -> r.dayNumber() == 358)).hasSize(3);
+		assertThat(rows.stream().filter(r -> r.dayNumber() == 359).map(ParsedPlanRow::bookName))
+				.containsExactly("Apocalipse");
+	}
+
+	@Test
 	void sameDayPlusSeparator() {
 		List<ParsedPlanRow> rows = parser.parsePlainText("40 Tito 1-2 + Filemom");
 		assertThat(rows).hasSize(2);
@@ -190,6 +280,16 @@ class ReadingPlanPdfParserTest {
 	void readingSegmentsParseSemicolonSeparated() {
 		assertThat(ReadingPlanReadingSegments.parse("Tito 1-3; Filemom 1-1")).hasSize(2)
 				.extracting(ReadingPlanReadingSegments.Segment::bookName).containsExactly("Tito", "Filemom");
+	}
+
+	@Test
+	void parsesD12ExtractedPdfText_includesDay358ThreeSegments() throws Exception {
+		Path file = Path.of("docs/planos/plano-biblico-d12-2026-extracted.txt");
+		Assumptions.assumeTrue(Files.isRegularFile(file),
+				"Arquivo extraído ausente em docs/planos/");
+		String text = Files.readString(file);
+		List<ParsedPlanRow> rows = parser.parsePlainText(text);
+		assertThat(rows.stream().filter(r -> r.dayNumber() == 358)).hasSize(3);
 	}
 
 	@Test
